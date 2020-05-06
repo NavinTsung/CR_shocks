@@ -14,7 +14,7 @@ plt.rcParams['font.size'] = 12
 plt.rcParams['legend.fontsize'] = 12
 plt.rcParams['legend.loc'] = 'best'
 plt.rcParams['lines.linewidth'] = 1.5
-plt.rcParams['lines.markersize'] = 3.
+plt.rcParams['lines.markersize'] = 2.
 plt.rcParams['mathtext.fontset'] = 'stix'
 plt.rcParams['font.family'] = 'STIXGeneral'
 
@@ -62,12 +62,13 @@ def gas_to_mnbeta(rho, pg, v, pc, B):
   return convert
 
 class Shock:
-  def __init__(self, rho, pg, v, pc, B):
+  def __init__(self, rho, pg, v, pc, B, kappa):
     self.rho = rho 
     self.v = v
     self.pg = pg 
     self.pc = pc 
     self.B = B
+    self.kappa = kappa
 
     # Secondary variables
     self.cs = np.sqrt(gamma_g*pg/rho)
@@ -88,8 +89,7 @@ class Shock:
     self.J = rho*v 
     self.M = self.J*v + pg + pc 
     self.E = 0.5*self.J*v**2 + (gamma_g/(gamma_g - 1.))*pg*v + fc 
-    self.S = (pg + (gamma_g - 1.)*B**2*(2*gamma_g*ma + 1. - gamma_g)/(gamma_g*(2.*gamma_g + 1.))) \
-      *np.cbrt((ma + gamma_g - 1.)**10)
+    self.S = (pg + (gamma_g - 1.)*B**2*(2*gamma_g*ma + 1. - gamma_g)/(gamma_g*(2.*gamma_g + 1.)))*np.cbrt((ma/(gamma_g - 1.) + 1.)**(10))
 
     # Parameters for plotting the shock diagram
     self.asymp = (gamma_c*(gamma_g - 1.)/((gamma_g - gamma_c)*ma))**2
@@ -109,6 +109,7 @@ class Shock:
     adrefhug = self.adrefhugzeros()
     self.v_adrefhugzeros = adrefhug['v_adrefhugzeros'] # Does not necessarily exist
     self.v_final = adrefhug['v_final']
+    self.runprofile = False
     # End of initialization
 
   def find_root(self, lower, upper, func, asymptote=None):
@@ -165,16 +166,6 @@ class Shock:
       return x_sol
 
   def hugzeros(self):
-    # ms = self.ms 
-    # mc = self.mc 
-    # ma = self.ma 
-    # delta = self.pc/self.pg
-    # part1 = lambda y: 0.5*(gamma_c + 1.)*(y - (gamma_c - 1.)/(gamma_c + 1.))
-    # part2 = lambda y: (gamma_c/(gamma_g*ms**2))*(1. + delta - (gamma_g - gamma_c)/(gamma_c*(gamma_g - 1.)*(1. - y)))
-    # part3 = lambda y: (gamma_c/ma)*(np.sqrt(y) - 1./(gamma_c*mc**2*(1. + np.sqrt(y))) + np.sqrt(y)/(gamma_g*ms**2*(1. - y)))
-    # lower = (gamma_c*(gamma_g - 1.)/((gamma_g - gamma_c)*ma))**2
-    # upper = self.v_pgzero/self.v 
-    # hug = lambda y: part1(y) - part2(y) - part3(y)
     J = self.J 
     M = self.M 
     E = self.E 
@@ -241,25 +232,25 @@ class Shock:
 
   def hugpcmaxzeros(self):
     asymp = self.asymp
-    if (self.regime in [1, 2, 3]):
-      lower = self.v_hugpczeros[0]/self.v if (self.v_hugzeros[0]/self.v < asymp) else self.v_hugzeros[0]/self.v 
-    else:
-      lower = self.v_hugpczeros[0]/self.v
+    lower = self.v_hugpczeros[0]/self.v if (self.regime in [2, 3, 4]) else self.v_hugzeros[0]/self.v
     upper = self.v_pczero/self.v 
     hugpcmax = lambda y: self.hugoniot(y) - self.pcmax(y)
     y_sol = self.find_root(lower, upper, hugpcmax, asymptote=asymp)
     return y_sol*self.v # Returns the hugoniot-pc max intersection
 
   def use_refhugon(self):
-    check = self.pcmax(self.v_hugpcmaxzeros[0]/self.v)
-    refchk1 = self.refhug(self.v_hugpcmaxzeros[0]/self.v)
-    refchk2 = self.refhug2(self.v_hugpcmaxzeros[0]/self.v)
-    use_refhug = True if (np.abs(refchk1 - check) < np.abs(refchk2 - check)) else False
+    if np.size(self.v_hugpcmaxzeros) != 0:
+      check = self.pcmax(self.v_hugpcmaxzeros[0]/self.v)
+      refchk1 = self.refhug(self.v_hugpcmaxzeros[0]/self.v)
+      refchk2 = self.refhug2(self.v_hugpcmaxzeros[0]/self.v)
+      use_refhug = True if (np.abs(refchk1 - check) < np.abs(refchk2 - check)) else False
+    else:
+      use_refhug = False
     return use_refhug
 
   def adrefhugzeros(self):
     asymp = self.asymp
-    if np.size(self.v_refpczero) == 0: # The reflected hugoniot doesn't exist
+    if np.size(self.v_hugpcmaxzeros) == 0: # The reflected hugoniot doesn't exist
       out = {}
       out['v_adrefhugzeros'] = np.array([])
       out['v_final'] = np.array([])
@@ -300,8 +291,8 @@ class Shock:
           ps = self.adiabat(ys)
           pcs = self.M - self.J*self.v*ys - self.pg*ps 
           pc_curve = lambda y: (self.M - pcs - self.J*self.v*y)/self.pg 
-          lower_fin = self.v_hugpczeros[0]/self.v if (self.v_hugzeros[0]/self.v < asymp) else self.v_hugpcmaxzeros[0]/self.v 
-          upper_fin = self.v_pczero/self.v 
+          lower_fin = self.v_hugpczeros[0]/self.v if (self.regime in [2, 3, 4]) else self.v_hugpcmaxzeros[0]/self.v
+          upper_fin = self.v_hugpcmaxzeros[0]/self.v if (self.regime in [2, 3, 4]) else self.v_pczero/self.v
           hugpc = lambda y: self.hugoniot(y) - pc_curve(y)
           y_solute = self.find_root(lower_fin, upper_fin, hugpc, asymptote=asymp)
           out['v_final'] = np.append(out['v_final'], y_solute*self.v)
@@ -321,27 +312,42 @@ class Shock:
     return (J*v/(gamma_g*pg))*y # Returns p-bar for the pc max curve
 
   def hugoniot(self, y):
-    # ms = self.ms 
-    # mc = self.mc 
-    # ma = self.ma 
-    # delta = self.pc/self.pg 
-    # part1 = 0.5*(gamma_c + 1.)*(y - (gamma_c - 1.)/(gamma_c + 1.))
-    # part2 = (gamma_c/(gamma_g*ms**2))*(1. + delta - (gamma_g - gamma_c)/(gamma_c*(gamma_g - 1.)*(1. - y)))
-    # part3 = (gamma_c/ma)*(np.sqrt(y) - 1./(gamma_c*mc**2*(1. + np.sqrt(y))) + np.sqrt(y)/(gamma_g*ms**2*(1. - y)))
-    # part4 = gamma_g*ms**2*(1. - y)/np.sqrt(y)
-    # part5 = ((gamma_g - gamma_c)*np.sqrt(y)/(gamma_g - 1.) - gamma_c/ma)*np.sqrt(y)/(gamma_g*ms**2*(1. - y))
-    
     J = self.J 
     M = self.M 
     E = self.E 
     v = self.v
     pg = self.pg
     ma = self.ma 
-    factor = 1. - 1./(ma*np.sqrt(y))
-    part1 = E/(v*y) - J*v*y*(0.5 - (gamma_c/(gamma_c - 1.))*factor) - (gamma_c/(gamma_c - 1.))*M*factor 
-    part2 = (gamma_g/(gamma_g - 1.)) - (gamma_c/(gamma_c - 1.))*factor 
-    return part1/(part2*pg)
-    # return (part1 - part2 - part3)*part4/part5 # Returns p-bar for the hugoniot
+    # factor = 1. - 1./(ma*np.sqrt(y))
+    # part1 = E/(v*y) - J*v*y*(0.5 - (gamma_c/(gamma_c - 1.))*factor) - (gamma_c/(gamma_c - 1.))*M*factor 
+    # part2 = (gamma_g/(gamma_g - 1.)) - (gamma_c/(gamma_c - 1.))*factor 
+    # return part1/(part2*pg)
+    ms = self.ms
+    mc = self.mc 
+    d = self.pc/self.pg 
+    part1 = 0.5*(gamma_c + 1.)*(y - (gamma_c - 1.)/(gamma_c + 1.))
+    part2 = (gamma_c/(gamma_g*ms**2))*(1. + d - (gamma_g - gamma_c)/(gamma_c*(gamma_g - 1.)*(1. - y)))
+    part3 = (gamma_c/ma)*(np.sqrt(y) - 1./(gamma_c*mc**2*(1. + np.sqrt(y))) + np.sqrt(y)/(gamma_g*ms**2*(1. - y)))
+    part4 = gamma_g*ms**2*(1. - y)/np.sqrt(y) 
+    part5 = (gamma_g - gamma_c)*np.sqrt(y)/(gamma_g - 1.) - gamma_c/ma 
+    return (part1 - part2 - part3)*part4/part5 # Returns p-bar for the hugoniot
+
+  def hugoniot2(self, y):
+    J = self.J 
+    M = self.M 
+    E = self.E 
+    v = self.v
+    pg = self.pg
+    ma = self.ma 
+    ms = self.ms
+    mc = self.mc 
+    d = self.pc/self.pg 
+    part1 = 0.5*(gamma_c + 1.)*(y - (gamma_c - 1.)/(gamma_c + 1.))
+    part2 = (gamma_c/(gamma_g*ms**2))*(1. + d - (gamma_g - gamma_c)/(gamma_c*(gamma_g - 1.)*(1. - y)))
+    part3 = (gamma_c/ma)*(np.sqrt(y) - 1./(gamma_c*mc**2*(1. + np.sqrt(y))) + np.sqrt(y)/(gamma_g*ms**2*(1. - y)))
+    part4 = gamma_g*ms**2*(1. - y)/np.sqrt(y) 
+    part5 = (gamma_g - gamma_c)*np.sqrt(y)/(gamma_g - 1.) + gamma_c/ma 
+    return (part1 - part2 + part3)*part4/part5 # Returns p-bar for the hugoniot
 
   def refhugcoeff(self):
     J = self.J 
@@ -373,10 +379,7 @@ class Shock:
     pc_array = np.linspace(pc_min, pc_max, 5)
     y_array = np.zeros(5)
     p_array = np.zeros(5)
-    if self.regime in [1, 2, 3]:
-      lower = 0.99*self.v_hugpczeros[0]/v if (self.v_hugzeros[0]/v < asymp) else self.v_hugzeros[0]/v 
-    else:
-      lower = 0.99*self.v_hugpczeros[0]/v
+    lower  = 0.99*self.v_hugpczeros[0]/v if (self.regime in [2, 3, 4]) else self.v_hugzeros[0]/v
     upper = self.v_pczero/v
     for i, pc in enumerate(pc_array):
       yb = gamma_g*(M - pc)/((gamma_g + 1.)*J*v)
@@ -413,9 +416,10 @@ class Shock:
     ver_roots = ver_roots[(ver_roots > self.v_hugpcmaxzeros[0]/self.v) & (ver_roots < self.v_pgzero/v)]
     p_ver = -(coeff[1]*ver_roots + coeff[4])/(2.*coeff[2])
     p_cap = self.pczero(ver_roots)
+    p_max = self.pcmax(ver_roots)
     delete_index = np.array([], dtype=int)
     for i, pe in enumerate(p_ver):
-      if (pe < 0) or (pe > p_cap[i]):
+      if (pe < 0) or (pe > p_cap[i]) or (pe > p_max[i]):
         delete_index = np.append(delete_index, i)
     ver_out = np.delete(ver_roots, delete_index) if np.size(delete_index) != 0 else ver_roots
 
@@ -467,9 +471,28 @@ class Shock:
     pg = self.pg 
     ma = self.ma 
     B = self.B
-    part1 = S/np.cbrt((ma*np.sqrt(y) + gamma_g - 1.)**10)
+    part1 = S/np.cbrt((ma*np.sqrt(y)/(gamma_g - 1.) + 1.)**(10.))
     part2 = (gamma_g - 1.)*B**2*(2.*gamma_g*ma*np.sqrt(y) + 1. - gamma_g)/(gamma_g*(2.*gamma_g + 1.))
     return (part1 - part2)/pg # Returns p-bar for the adiabat
+
+  # D function in Volk et al. 1984
+  def D(self, y): 
+    ms = self.ms
+    ma = self.ma
+    pbar = self.adiabat(y) 
+    return (pbar/(y*ms**2) - 1.)/(1. + (gamma_g - 1.)/(ma*np.sqrt(y))) 
+
+  # N function in Volk et al. 1984
+  def N(self, y):
+    ms = self.ms
+    mc = self.mc 
+    ma = self.ma 
+    d = self.pc/self.pg 
+    pbar = self.adiabat(y)
+    part1 = 0.5*(gamma_c + 1.)*(y - (gamma_c - 1.)/(gamma_c + 1.))
+    part2 = (gamma_c/(gamma_g*ms**2))*(1. + d - (gamma_g - gamma_c)*(1. - pbar*y)/(gamma_c*(gamma_g - 1.)*(1. - y)))
+    part3 = (gamma_c/ma)*(np.sqrt(y) - 1./(gamma_c*mc**2*(1. + np.sqrt(y))) + np.sqrt(y)*(1. - pbar)/(gamma_g*ms**2*(1. - y)))
+    return part1 - part2 - part3
 
   def solution(self):
     if np.size(self.v_final) != 0: 
@@ -488,6 +511,7 @@ class Shock:
       rho2 = np.array([])
       pg2 = np.array([])
       pc2 = np.array([])
+    # Store final solution
     downstream = {}
     downstream['rho'] = rho2 
     downstream['v'] = v2 
@@ -523,7 +547,7 @@ class Shock:
       y_adia = np.linspace(self.v_adhugzeros[0]/self.v, 1., 1000)
 
     # The reflected hugoniot
-    if (np.size(self.v_hugpcmaxzeros) > 0) and (np.size(self.v_refpczero) > 0):
+    if (np.size(self.v_hugpcmaxzeros) > 0):
       if (np.size(self.v_ver) > 0):
           y_ref = np.linspace(self.v_hugpcmaxzeros[0]/self.v, self.v_ver[0]/self.v, 1000)
           y_ref2 = np.linspace(self.v_refpczero/self.v, self.v_ver[0]/self.v, 1000)
@@ -553,7 +577,7 @@ class Shock:
       ax.scatter(self.v_adrefhugzeros, self.pg*self.adiabat(self.v_adrefhugzeros/self.v), marker='o', color='k')
       ax.scatter(self.v_final, self.pg*self.hugoniot(self.v_final/self.v), marker='o', color='k')
     
-    if (np.size(self.v_hugpcmaxzeros) > 0) and (np.size(self.v_refpczero) > 0):
+    if (np.size(self.v_hugpcmaxzeros) > 0):
       if (np.size(self.v_ver) > 0):
         if self.use_refhug:
           ax.plot(self.v*np.append(y_ref, y_ref2[::-1]), self.pg*np.append(self.refhug(y_ref), self.refhug2(y_ref2[::-1])), label='Reflect')
@@ -565,15 +589,12 @@ class Shock:
         else:
           ax.plot(self.v*y_ref, self.pg*self.refhug2(y_ref), label='Reflect')
 
-    ax.scatter(self.v, self.pg, marker='o', color='k')
+    ax.plot(self.v*y_hug, self.pg*self.hugoniot2(y_hug))
 
-    # y1 = np.linspace(0.01, self.v_pgzero/self.v, 100)
-    # y2 = np.linspace(0.01, self.v_pgzero/self.v, 100)
-    # ax.plot(self.v*y1, self.pg*self.refhug(y1), label='ref_min')
-    # ax.plot(self.v*y2, self.pg*self.refhug2(y2), label='ref_max')
+    ax.scatter(self.v, self.pg, marker='o', color='k')
     
     ax.set_xlim(0, self.v_pgzero)
-    ax.set_ylim(0, self.M/self.pg)
+    ax.set_ylim(0, self.M)
     ax.margins(x=0, y=0)
     ax.legend(frameon=False)
 
@@ -582,32 +603,267 @@ class Shock:
       ax.get_yaxis().set_visible(False)
 
     return fig
+
+  def profile(self):
+    ldiff = self.kappa/self.v 
+    vf = self.v_adrefhugzeros[0] if np.size(self.v_adrefhugzeros) != 0 else self.v_adhugzeros[0] 
+
+    if np.size(vf) == 0:
+      print('No solution')
+      return 
+
+    int_bin = 5000
+    yf = vf/self.v
+    y_int = np.linspace(0.9999, yf, int_bin)
+    dxdy = lambda y, x: ldiff*self.D(y)/((1. - y)*self.N(y))
+    sol = integrate.solve_ivp(dxdy, [y_int[0], 0.9999*y_int[-1]], [0.], t_eval=y_int) # 0.9999 to ensure t_span encompasses y_int
+    x_int = sol.y[0]
+
+    rho_int = self.J/(self.v*y_int) 
+    v_int = self.v*y_int
+    pg_int = self.pg*np.array([self.adiabat(y) for i, y in enumerate(y_int)])
+    pc_int = self.M - self.J*self.v*y_int - pg_int 
+    va_int = self.B/np.sqrt(rho_int)
+    fc_int = self.E - 0.5*self.J*(self.v*y_int)**2 - (gamma_g/(gamma_g - 1.))*pg_int*self.v*y_int
+    ma_int = v_int/(self.B/np.sqrt(rho_int))
+    wave_int = (1. + ma_int/(gamma_g - 1.))**(2.*gamma_g)*(pg_int + (gamma_g - 1.)*self.B**2*(2*gamma_g*ma_int + 1. - gamma_g)/(gamma_g*(2.*gamma_g + 1.)))
+    dpcdx_int = ((gamma_c/(gamma_c - 1.))*pc_int*(v_int - va_int) - fc_int)*(gamma_c - 1.)/self.kappa
+    sa_int = ((gamma_c - 1.)/gamma_c)*np.abs(dpcdx_int)/(pc_int*va_int)
+    sd_int = (gamma_c - 1.)/self.kappa 
+    sc_int = sa_int*sd_int/(sa_int + sd_int)
+
+    # Append final solution if necessary
+    if np.size(self.v_adrefhugzeros) != 0:
+      v2 = self.v_final 
+      rho2 = self.J/v2
+      pg2 = self.pg*self.hugoniot(v2/self.v)
+      pc2 = self.M - self.J*v2 - pg2 
+      va2 = self.B/np.sqrt(rho2)
+
+      x_int = np.append(x_int, x_int[-1])
+      v_int = self.v*np.append(y_int, v2/self.v)
+      rho_int = np.append(rho_int, rho2)
+      pg_int = np.append(pg_int, pg2)
+      pc_int = np.append(pc_int, pc2)
+      fc_int = np.append(fc_int, fc_int[-1])
+      ma2 = v2/(self.B/np.sqrt(rho2))
+      wave2 = (1. + ma2/(gamma_g - 1.))**(2.*gamma_g)*(pg2 + (gamma_g - 1.)*self.B**2*(2*gamma_g*ma2 + 1. - gamma_g)/(gamma_g*(2.*gamma_g + 1.)))
+      wave_int = np.append(wave_int, wave2)
+      dpcdx_int = np.append(dpcdx_int, 0.)
+      sa_int = np.append(sa_int, 0.)
+      sc_int = np.append(sc_int, 0.)
+
+    # Save to memory
+    self.x_int = x_int
+    self.v_int = v_int 
+    self.rho_int = rho_int 
+    self.pg_int = pg_int 
+    self.pc_int = pc_int 
+    self.fc_int = fc_int
+    self.wave_int = wave_int
+    self.dpcdx_int = dpcdx_int 
+    self.sa_int = sa_int 
+    self.sd_int = sd_int 
+    self.sc_int = sc_int
+
+    # Mark as run
+    self.runprofile = True
+    return
+
+  def plotprofile(self, compare=None):
+    if self.runprofile == False:
+      self.profile()
+
+    signature = 1
+    if compare != None:
+      with h5py.File(compare, 'r') as fp:
+        x = np.array(fp['x'])
+        rho = np.array(fp['rho'])
+        v = np.array(fp['v'])
+        pg = np.array(fp['pg'])
+        pc = np.array(fp['pc'])
+        fc = np.array(fp['fc'])
+
+        mass = np.abs(rho*v)
+        mom = rho*v**2 + pg + pc
+        eng = np.abs((0.5*rho*v**2 + (gamma_g/(gamma_g - 1.))*pg)*v + fc)
+        ma = np.abs(v/(self.B/np.sqrt(rho)))
+        wave = (1. + ma/(gamma_g - 1.))**(2.*gamma_g)*(pg + (gamma_g - 1.)*self.B**2*(2*gamma_g*ma + 1. - gamma_g)/(gamma_g*(2.*gamma_g + 1.)))   
+
+      # Save to memory
+      self.x_sim = x 
+      self.rho_sim = rho 
+      self.v_sim = v 
+      self.pg_sim = pg 
+      self.pc_sim = pc 
+      self.fc_sim = fc
+
+      # Shift position of curves by finding the location of max grad pc
+      drhodx = np.gradient(rho,x)
+      dpcdx = np.gradient(pc, x)
+      x0 = x[np.argmax(np.abs(dpcdx))]
+      x0_int = self.x_int[np.argmax(np.abs(np.gradient(self.pc_int[:-1], self.x_int[:-1])))]
+      if dpcdx[np.argmax(np.abs(dpcdx))] > 0:
+        self.x_int = self.x_int - x0_int + x0 
+        signature = 1
+      else:
+        self.x_int = -(self.x_int - x0_int) + x0
+        signature = -1
+
+    fig = plt.figure()
+
+    grids = gs.GridSpec(5, 1, figure=fig, hspace=0)
+    ax1 = fig.add_subplot(grids[0, 0])
+    ax2 = fig.add_subplot(grids[1, 0])
+    ax3 = fig.add_subplot(grids[2, 0])
+    ax4 = fig.add_subplot(grids[3, 0])
+    ax5 = fig.add_subplot(grids[4, 0])
+
+    ax1.plot(self.x_int, self.rho_int, 'o-', label='$\\rho$')
+    ax2.plot(self.x_int, signature*self.v_int, 'o-', label='$v$')
+    ax3.plot(self.x_int, self.pg_int, 'o-', label='$P_g$')
+    ax4.plot(self.x_int, self.pc_int, 'o-', label='$P_c$')
+    ax5.plot(self.x_int, signature*self.fc_int, 'o-', label='$F_c$')
+
+    if compare != None:
+      ax1.plot(x, rho, '--', label='Sim')
+      ax2.plot(x, v, '--', label='Sim')
+      ax3.plot(x, pg, '--', label='Sim')
+      ax4.plot(x, pc, '--', label='Sim')
+      ax5.plot(x, fc, '--', label='Sim')
+
+    for axes in fig.axes:
+      axes.xaxis.set_minor_locator(AutoMinorLocator())
+      axes.yaxis.set_minor_locator(AutoMinorLocator())
+      axes.legend(frameon=False, fontsize=10)
+      if axes != ax5:
+        axes.set_xticks([])
+      else:
+        axes.set_xlabel('$x$', fontsize=10)
+
+      for label in (axes.get_xticklabels() + axes.get_yticklabels()):
+        label.set_fontsize(10)
+
+    fig.tight_layout()
+
+    if compare != None:
+      # Plot conserved quantities
+      fig2 = plt.figure()
+
+      grids2 = gs.GridSpec(4, 1, figure=fig2, hspace=0)
+      axx1 = fig2.add_subplot(grids2[0, 0])
+      axx2 = fig2.add_subplot(grids2[1, 0])
+      axx3 = fig2.add_subplot(grids2[2, 0])
+      axx4 = fig2.add_subplot(grids2[3, 0])
+
+      axx1.plot(self.x_int, self.J*np.ones(np.size(self.x_int)), label='Mass flux')
+      axx2.plot(self.x_int, self.M*np.ones(np.size(self.x_int)), label='Momentum flux')
+      axx3.plot(self.x_int, self.E*np.ones(np.size(self.x_int)), label='Energy flux')
+      axx4.plot(self.x_int, self.wave_int, label='Wave adiabat')
+
+      axx1.plot(x, mass, '--', label='Sim')
+      axx2.plot(x, mom, '--', label='Sim')
+      axx3.plot(x, eng, '--', label='Sim')
+      axx4.plot(x, wave, '--', label='Sim')
+
+      for axes in fig2.axes:
+        axes.xaxis.set_minor_locator(AutoMinorLocator())
+        axes.yaxis.set_minor_locator(AutoMinorLocator())
+        axes.legend(frameon=False, fontsize=10)
+        if axes != axx4:
+          axes.set_xticks([])
+        else:
+          axes.set_xlabel('$x$', fontsize=10)
+
+        for label in (axes.get_xticklabels() + axes.get_yticklabels()):
+          label.set_fontsize(10)
+
+      fig2.tight_layout()
+
+    if compare == None:
+      return fig
+    else:
+      return (fig, fig2)
+
       
 # End of class
 
 ###########################################
-rho1 = 1. 
-pg1 = 1. 
-m1 = 1.01
-n1 = 0.5 
-beta1 = 0.01
+# rho1 = 1.
+# pg1 = 1.
+# m1 = 1.348
+# n1 = 0.980
+# beta1 = 0.712
 
-upstream = mnbeta_to_gas(rho1, pg1, m1, n1, beta1)
-# upstream = {}
-# upstream['rho'] = 1.
-# upstream['v'] = 8.58
-# upstream['pg'] = 1.
-# upstream['pc'] = 1.
-# upstream['B'] = 1.
+# upstream = mnbeta_to_gas(rho1, pg1, m1, n1, beta1)
+upstream = {}
+upstream['rho'] = 100.0184555053711
+upstream['v'] = 1.355642728280412
+upstream['pg'] = 1.0018928050994873
+upstream['pc'] = 16.699076334635418
+upstream['B'] = 1.0
+
+kappa = 0.1
 
 alter = gas_to_mnbeta(upstream['rho'], upstream['pg'], upstream['v'], upstream['pc'], upstream['B'])
 
-shock = Shock(upstream['rho'], upstream['pg'], upstream['v'], upstream['pc'], upstream['B'])
-# downstream = shock.solution()
+shock = Shock(upstream['rho'], upstream['pg'], upstream['v'], upstream['pc'], upstream['B'], kappa)
+downstream = shock.solution()
+down_mnbeta = gas_to_mnbeta(downstream['rho'], downstream['pg'], downstream['v'], downstream['pc'], upstream['B'])
 
 # Plot diagram
 fig = shock.shock_diagram(don_want_axis=False)
-fig.savefig('./sh_struct.png', dpi=300)
+fig.savefig('./sh_struct_stream.png', dpi=300)
 plt.show(fig)
 
+# Plot shock profile
+shkfig, convfig = shock.plotprofile(compare='./shock.hdf5')
+# shkfig = shock.plotprofile()
+shkfig.savefig('./sh_profile_stream.png', dpi=300)
+convfig.savefig('./sh_conv_stream.png', dpi=300)
+plt.show()
+
+# Calculate source term
+source = shock.sc_int*(shock.fc_int - (gamma_c/(gamma_c - 1.))*shock.pc_int*shock.v_int)
+dpcdx_sim = np.gradient(shock.pc_sim, shock.x_sim)
+va_sim = shock.B/np.sqrt(shock.rho_sim)
+sa = ((gamma_c - 1.)/gamma_c)*np.abs(dpcdx_sim)/(shock.pc_sim*va_sim)
+sd = (gamma_c - 1.)/shock.kappa 
+sc = sa*sd/(sa + sd) 
+sou = sc*(shock.fc_sim - (gamma_c/(gamma_c - 1.))*shock.pc_sim*shock.v_sim)
+plt.plot(shock.x_int, source)
+plt.plot(shock.x_sim, sou)
+plt.show()
+
 plt.close('all')
+
+# rho1 = 1.
+# pg1 = 1.
+# m1 = np.logspace(0, 2, 100) 
+# n1 = 0.5
+# beta1 = 1000.
+
+# fig = plt.figure()
+# ax = fig.add_subplot(111)
+# ax.set_title('N = {0}, $\\beta$ = {1}'.format(n1, beta1))
+
+# for i, m in enumerate(m1):
+#   print(i)
+#   upstream = mnbeta_to_gas(rho1, pg1, m, n1, beta1)
+#   shock = Shock(upstream['rho'], upstream['pg'], upstream['v'], upstream['pc'], upstream['B']) 
+#   downstream = shock.solution()
+#   vel_frac = downstream['v']/shock.v
+#   pc_frac = downstream['pc']/shock.M 
+#   pg_frac = downstream['pg']/shock.M
+#   for j, frac in enumerate(pc_frac):
+#     ax.scatter(m, vel_frac[j], color='b')
+#     ax.scatter(m, pc_frac[j], color='g')
+#     ax.scatter(m, pg_frac[j], color='r')
+
+# ax.margins(x=0)
+# ax.set_ylim(0, 1)
+# ax.set_xlabel('$M$')
+
+# fig.tight_layout()
+# plt.show(fig)
+# plt.close('all')
