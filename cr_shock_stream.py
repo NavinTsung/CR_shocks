@@ -915,7 +915,7 @@ class Shock:
       sa_int = np.append(sa_int, 0.)
       sc_int = np.append(sc_int, 0.)
     elif (old_solution == False) and (np.size(self.v_adref2hugzeros) != 0):
-      v2 = self.v_final 
+      v2 = self.v_final2 
       rho2 = self.J/v2
       pg2 = self.pg*self.hugoniot2(v2/self.v)
       pc2 = self.M - self.J*v2 - pg2 
@@ -1085,13 +1085,13 @@ class Shock:
 
 # upstream = mnbeta_to_gas(rho1, pg1, m1, n1, beta1)
 upstream = {}
-upstream['rho'] = 3.927311658859253
-upstream['v'] = 5.906717633866192
-upstream['pg'] = 40.43893814086914
-upstream['pc'] = 10.337730407714844
+upstream['rho'] = 100.00000762939453
+upstream['v'] = 1.3421467170315236
+upstream['pg'] = 1.0000033378601074
+upstream['pc'] = 0.33628729979197186
 upstream['B'] = 1.0
 
-kappa = 1.
+kappa = 0.1
 
 alter = gas_to_mnbeta(upstream['rho'], upstream['pg'], upstream['v'], upstream['pc'], upstream['B'])
 
@@ -1107,8 +1107,8 @@ fig.savefig('./sh_struct_stream.png', dpi=300)
 plt.show(fig)
 
 # Plot shock profile
-shkfig, convfig = shock.plotprofile(compare='./shock.hdf5')
-# shkfig, convfig = shock.plotprofile(compare='./shock.hdf5', old_solution=False)
+# shkfig, convfig = shock.plotprofile(compare='./shock.hdf5')
+shkfig, convfig = shock.plotprofile(compare='./shock.hdf5', old_solution=False)
 # shkfig = shock.plotprofile()
 shkfig.savefig('./sh_profile_stream.png', dpi=300)
 convfig.savefig('./sh_conv_stream.png', dpi=300)
