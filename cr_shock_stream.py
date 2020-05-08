@@ -863,12 +863,12 @@ class Shock:
 
     return fig
 
-  def profile(self, old_solution=True):
+  def profile(self, old_solution=True, mode=0): # In case of multiple solution, mode determines (starting from 0), in order of decreasing Pc, the displayed solution
     ldiff = self.kappa/self.v 
     if old_solution:
-      vf = self.v_adrefhugzeros[0] if np.size(self.v_adrefhugzeros) != 0 else self.v_adhugzeros[0] 
+      vf = self.v_adrefhugzeros[mode] if np.size(self.v_adrefhugzeros) != 0 else self.v_adhugzeros[0]
     else:
-      vf = self.v_adref2hugzeros[0] if np.size(self.v_adref2hugzeros) != 0 else self.v_adhug2zeros[0] 
+      vf = self.v_adref2hugzeros[mode] if np.size(self.v_adref2hugzeros) != 0 else self.v_adhug2zeros[0] 
 
     if np.size(vf) == 0:
       print('No solution')
@@ -896,7 +896,7 @@ class Shock:
 
     # Append final solution if necessary
     if old_solution and (np.size(self.v_adrefhugzeros) != 0):
-      v2 = self.v_final 
+      v2 = self.v_final[mode]
       rho2 = self.J/v2
       pg2 = self.pg*self.hugoniot(v2/self.v)
       pc2 = self.M - self.J*v2 - pg2 
@@ -915,7 +915,7 @@ class Shock:
       sa_int = np.append(sa_int, 0.)
       sc_int = np.append(sc_int, 0.)
     elif (old_solution == False) and (np.size(self.v_adref2hugzeros) != 0):
-      v2 = self.v_final2 
+      v2 = self.v_final2[mode]
       rho2 = self.J/v2
       pg2 = self.pg*self.hugoniot2(v2/self.v)
       pc2 = self.M - self.J*v2 - pg2 
@@ -954,11 +954,12 @@ class Shock:
       self.runprofile2 = True
     return
 
-  def plotprofile(self, compare=None, old_solution=True):
+  def plotprofile(self, compare=None, old_solution=True, mode=1):
+    mode_num = mode
     if old_solution and (self.runprofile == False):
-      self.profile()
+      self.profile(mode=mode_num)
     elif (old_solution == False) and (self.runprofile2 == False):
-      self.profile(old_solution=False)
+      self.profile(old_solution=False, mode=mode_num)
 
     signature = 1
     if compare != None:
@@ -1033,63 +1034,60 @@ class Shock:
 
     fig.tight_layout()
 
+    # Plot conserved quantities
+    fig2 = plt.figure()
+
+    grids2 = gs.GridSpec(4, 1, figure=fig2, hspace=0)
+    axx1 = fig2.add_subplot(grids2[0, 0])
+    axx2 = fig2.add_subplot(grids2[1, 0])
+    axx3 = fig2.add_subplot(grids2[2, 0])
+    axx4 = fig2.add_subplot(grids2[3, 0])
+
+    axx1.plot(self.x_int, self.J*np.ones(np.size(self.x_int)), label='Mass flux')
+    axx2.plot(self.x_int, self.M*np.ones(np.size(self.x_int)), label='Momentum flux')
+    axx3.plot(self.x_int, self.E*np.ones(np.size(self.x_int)), label='Energy flux')
+    axx4.plot(self.x_int, self.wave_int, label='Wave adiabat')
+
     if compare != None:
-      # Plot conserved quantities
-      fig2 = plt.figure()
-
-      grids2 = gs.GridSpec(4, 1, figure=fig2, hspace=0)
-      axx1 = fig2.add_subplot(grids2[0, 0])
-      axx2 = fig2.add_subplot(grids2[1, 0])
-      axx3 = fig2.add_subplot(grids2[2, 0])
-      axx4 = fig2.add_subplot(grids2[3, 0])
-
-      axx1.plot(self.x_int, self.J*np.ones(np.size(self.x_int)), label='Mass flux')
-      axx2.plot(self.x_int, self.M*np.ones(np.size(self.x_int)), label='Momentum flux')
-      axx3.plot(self.x_int, self.E*np.ones(np.size(self.x_int)), label='Energy flux')
-      axx4.plot(self.x_int, self.wave_int, label='Wave adiabat')
-
       axx1.plot(x, mass, '--', label='Sim')
       axx2.plot(x, mom, '--', label='Sim')
       axx3.plot(x, eng, '--', label='Sim')
-      axx4.plot(x, wave, '--', label='Sim')
-      axx4.plot(x, wave2, '--')
+      axx4.plot(x, wave, '--', label='Sim/unidir')
+      axx4.plot(x, wave2, '--', label='Sim/bidir')
 
-      for axes in fig2.axes:
-        axes.xaxis.set_minor_locator(AutoMinorLocator())
-        axes.yaxis.set_minor_locator(AutoMinorLocator())
-        axes.legend(frameon=False, fontsize=10)
-        if axes != axx4:
-          axes.set_xticks([])
-        else:
-          axes.set_xlabel('$x$', fontsize=10)
+    for axes in fig2.axes:
+      axes.xaxis.set_minor_locator(AutoMinorLocator())
+      axes.yaxis.set_minor_locator(AutoMinorLocator())
+      axes.legend(frameon=False, fontsize=10)
+      if axes != axx4:
+        axes.set_xticks([])
+      else:
+        axes.set_xlabel('$x$', fontsize=10)
 
-        for label in (axes.get_xticklabels() + axes.get_yticklabels()):
-          label.set_fontsize(10)
+      for label in (axes.get_xticklabels() + axes.get_yticklabels()):
+        label.set_fontsize(10)
 
-      fig2.tight_layout()
+    fig2.tight_layout()
 
-    if compare == None:
-      return fig
-    else:
-      return (fig, fig2)
+    return (fig, fig2)
 
       
 # End of class
 
 ###########################################
-# rho1 = 1.
+# rho1 = 1000.
 # pg1 = 1.
-# m1 = 1.348
-# n1 = 0.980
-# beta1 = 0.712
-
+# m1 = 30.
+# n1 = 0.5
+# beta1 = 2.
 # upstream = mnbeta_to_gas(rho1, pg1, m1, n1, beta1)
+
 upstream = {}
-upstream['rho'] = 100.00000762939453
-upstream['v'] = 1.3421467170315236
-upstream['pg'] = 1.0000033378601074
-upstream['pc'] = 0.33628729979197186
-upstream['B'] = 1.0
+upstream['rho'] = 1000.
+upstream['v'] = 2.
+upstream['pg'] = 1.
+upstream['pc'] = 1.
+upstream['B'] = 1.41
 
 kappa = 0.1
 
@@ -1108,23 +1106,11 @@ plt.show(fig)
 
 # Plot shock profile
 # shkfig, convfig = shock.plotprofile(compare='./shock.hdf5')
-shkfig, convfig = shock.plotprofile(compare='./shock.hdf5', old_solution=False)
-# shkfig = shock.plotprofile()
+# shkfig, convfig = shock.plotprofile(compare='./shock.hdf5', old_solution=False)
+shkfig, convfig = shock.plotprofile(old_solution=False, mode=0)
 shkfig.savefig('./sh_profile_stream.png', dpi=300)
 convfig.savefig('./sh_conv_stream.png', dpi=300)
-plt.show()
-
-# Calculate source term
-source = shock.sc_int*(shock.fc_int - (gamma_c/(gamma_c - 1.))*shock.pc_int*shock.v_int)
-dpcdx_sim = np.gradient(shock.pc_sim, shock.x_sim)
-va_sim = shock.B/np.sqrt(shock.rho_sim)
-sa = ((gamma_c - 1.)/gamma_c)*np.abs(dpcdx_sim)/(shock.pc_sim*va_sim)
-sd = (gamma_c - 1.)/shock.kappa 
-sc = sa*sd/(sa + sd) 
-sou = sc*(shock.fc_sim - (gamma_c/(gamma_c - 1.))*shock.pc_sim*shock.v_sim)
-plt.plot(shock.x_int, source)
-plt.plot(shock.x_sim, sou)
-plt.show()
+plt.show() 
 
 plt.close('all')
 
