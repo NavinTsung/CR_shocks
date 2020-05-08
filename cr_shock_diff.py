@@ -48,11 +48,12 @@ def gas_to_mn(rho, pg, v, pc):
   return convert
 
 class Shock:
-  def __init__(self, rho, pg, v, pc):
+  def __init__(self, rho, pg, v, pc, kappa):
     self.rho = rho 
     self.v = v
     self.pg = pg 
     self.pc = pc 
+    self.kappa = kappa
 
     # Secondary variables
     self.cs = np.sqrt(gamma_g*pg/rho)
@@ -86,6 +87,7 @@ class Shock:
     adrefhug = self.adrefhugzeros()
     self.v_adrefhugzeros = adrefhug['v_adrefhugzeros'] # Does not necessarily exist
     self.v_final = adrefhug['v_final']
+    self.runprofile = False
     # End of initialization
 
   def find_root(self, lower, upper, func):
@@ -335,6 +337,22 @@ class Shock:
     adi = (S/pg)*np.cbrt((J/(v*y))**5)
     return adi # Returns p-bar for the adiabat
 
+  # D function in Volk et al. 1984
+  def D(self, y): 
+    ms = self.ms
+    pbar = self.adiabat(y) 
+    return (pbar/(y*ms**2) - 1.)
+
+  # N function in Volk et al. 1984
+  def N(self, y):
+    ms = self.ms
+    mc = self.mc 
+    d = self.pc/self.pg 
+    pbar = self.adiabat(y)
+    part1 = 0.5*(gamma_c + 1.)*(y - (gamma_c - 1.)/(gamma_c + 1.))
+    part2 = (gamma_c/(gamma_g*ms**2))*(1. + d - (gamma_g - gamma_c)*(1. - pbar*y)/(gamma_c*(gamma_g - 1.)*(1. - y)))
+    return part1 - part2
+
   def solution(self):
     if np.size(self.v_final) != 0: 
       v2 = self.v_final
@@ -419,31 +437,222 @@ class Shock:
       ax.get_yaxis().set_visible(False)
 
     return fig
+
+  def profile(self, mode=0): # In case of multiple solution, mode determines (starting from 0), in order of decreasing Pc, the displayed solution
+    ldiff = self.kappa/self.v 
+    vf = self.v_adrefhugzeros[mode] if np.size(self.v_adrefhugzeros) != 0 else self.v_adhugzeros[0] 
+
+    if np.size(vf) == 0:
+      print('No solution')
+      return 
+
+    int_bin = 5000
+    yf = vf/self.v
+    y_int = np.linspace(0.9999, yf, int_bin)
+    dxdy = lambda y, x: ldiff*self.D(y)/((1. - y)*self.N(y))
+    sol = integrate.solve_ivp(dxdy, [y_int[0], y_int[-1]], [0.], t_eval=y_int)
+    x_int = sol.y[0]
+
+    rho_int = self.J/(self.v*y_int) 
+    pg_int = self.pg*np.array([self.adiabat(y) for i, y in enumerate(y_int)])
+    pc_int = self.M - self.J*self.v*y_int - pg_int 
+    fc_int = self.E - 0.5*self.J*(self.v*y_int)**2 - (gamma_g/(gamma_g - 1.))*pg_int*self.v*y_int
+    wave_int = pg_int/rho_int**(gamma_g) 
+
+    # Append final solution if necessary
+    if np.size(self.v_adrefhugzeros) != 0:
+      v2 = self.v_final[mode] 
+      rho2 = self.J/v2
+      pg2 = self.pg*self.hugoniot(v2/self.v)
+      pc2 = self.M - self.J*v2 - pg2 
+
+      x_int = np.append(x_int, x_int[-1])
+      v_int = self.v*np.append(y_int, v2/self.v)
+      rho_int = np.append(rho_int, rho2)
+      pg_int = np.append(pg_int, pg2)
+      pc_int = np.append(pc_int, pc2)
+      fc_int = np.append(fc_int, fc_int[-1])
+      wave_int = pg_int/rho_int**(gamma_g)
+
+    # Save to memory
+    self.x_int = x_int
+    self.v_int = v_int 
+    self.rho_int = rho_int 
+    self.pg_int = pg_int 
+    self.pc_int = pc_int 
+    self.fc_int = fc_int
+    self.wave_int = wave_int
+
+    # Mark as run
+    self.runprofile = True
+    return
+
+  def plotprofile(self, compare=None, mode=0): # compare = dataset filename
+    mode_num = mode
+    if self.runprofile == False:
+      self.profile(mode=mode_num)
+
+    signature = 1
+    if compare != None:
+      with h5py.File(compare, 'r') as fp:
+        x = np.array(fp['x'])
+        rho = np.array(fp['rho'])
+        v = np.array(fp['v'])
+        pg = np.array(fp['pg'])
+        pc = np.array(fp['pc'])
+        fc = np.array(fp['fc'])
+
+        mass = rho*v 
+        mom = rho*v**2 + pg + pc
+        eng = (0.5*rho*v**2 + (gamma_g/(gamma_g - 1.))*pg)*v + fc 
+        wave = pg/rho**(gamma_g) 
+
+      # Shift position of curves by finding the location of max grad pc
+      drhodx = np.gradient(rho,x)
+      dpcdx = np.gradient(pc, x)
+      x0 = x[np.argmax(np.abs(dpcdx))]
+      x0_int = self.x_int[np.argmax(np.abs(np.gradient(self.pc_int[:-1], self.x_int[:-1])))]
+      if dpcdx[np.argmax(np.abs(dpcdx))] > 0:
+        self.x_int = self.x_int - x0_int + x0 
+        signature = 1
+      else:
+        self.x_int = -(self.x_int - x0_int) + x0
+        signature = -1
+
+    fig = plt.figure()
+
+    grids = gs.GridSpec(5, 1, figure=fig, hspace=0)
+    ax1 = fig.add_subplot(grids[0, 0])
+    ax2 = fig.add_subplot(grids[1, 0])
+    ax3 = fig.add_subplot(grids[2, 0])
+    ax4 = fig.add_subplot(grids[3, 0])
+    ax5 = fig.add_subplot(grids[4, 0])
+
+    ax1.plot(self.x_int, self.rho_int, 'o-', label='$\\rho$')
+    ax2.plot(self.x_int, signature*self.v_int, 'o-', label='$v$')
+    ax3.plot(self.x_int, self.pg_int, 'o-', label='$P_g$')
+    ax4.plot(self.x_int, self.pc_int, 'o-', label='$P_c$')
+    ax5.plot(self.x_int, signature*self.fc_int, 'o-', label='$F_c$')
+
+    if compare != None:
+      ax1.plot(x, rho, '--', label='Sim')
+      ax2.plot(x, v, '--', label='Sim')
+      ax3.plot(x, pg, '--', label='Sim')
+      ax4.plot(x, pc, '--', label='Sim')
+      ax5.plot(x, fc, '--', label='Sim')
+
+    for axes in fig.axes:
+      axes.xaxis.set_minor_locator(AutoMinorLocator())
+      axes.yaxis.set_minor_locator(AutoMinorLocator())
+      axes.legend(frameon=False, fontsize=10)
+      if axes != ax5:
+        axes.set_xticks([])
+      else:
+        axes.set_xlabel('$x$', fontsize=10)
+
+      for label in (axes.get_xticklabels() + axes.get_yticklabels()):
+        label.set_fontsize(10)
+
+    fig.tight_layout()
+
+    # Plot conserved quantities
+    fig2 = plt.figure()
+
+    grids2 = gs.GridSpec(4, 1, figure=fig2, hspace=0)
+    axx1 = fig2.add_subplot(grids2[0, 0])
+    axx2 = fig2.add_subplot(grids2[1, 0])
+    axx3 = fig2.add_subplot(grids2[2, 0])
+    axx4 = fig2.add_subplot(grids2[3, 0])
+
+    axx1.plot(self.x_int, self.J*np.ones(np.size(self.x_int)), label='Mass flux')
+    axx2.plot(self.x_int, self.M*np.ones(np.size(self.x_int)), label='Momentum flux')
+    axx3.plot(self.x_int, self.E*np.ones(np.size(self.x_int)), label='Energy flux')
+    axx4.plot(self.x_int, self.wave_int, label='Wave adiabat')
+
+    if compare != None:
+      axx1.plot(x, np.abs(mass), '--', label='Sim')
+      axx2.plot(x, mom, '--', label='Sim')
+      axx3.plot(x, np.abs(eng), '--', label='Sim')
+      axx4.plot(x, wave, '--', label='Sim')
+
+    for axes in fig2.axes:
+      axes.xaxis.set_minor_locator(AutoMinorLocator())
+      axes.yaxis.set_minor_locator(AutoMinorLocator())
+      axes.legend(frameon=False, fontsize=10)
+      if axes != axx4:
+        axes.set_xticks([])
+      else:
+        axes.set_xlabel('$x$', fontsize=10)
+
+      for label in (axes.get_xticklabels() + axes.get_yticklabels()):
+        label.set_fontsize(10)
+
+    fig2.tight_layout()
+
+    return (fig, fig2)
       
 # End of class
 
 ###########################################
-rho1 = 1. 
+rho1 = 100.
 pg1 = 1.
-m1 = 75.
-n1 = 0.5 
-
+m1 = 6.
+n1 = 0.05
 upstream = mn_to_gas(rho1, pg1, m1, n1)
+
 # upstream = {}
-# upstream['rho'] = 1.
-# upstream['v'] = 8.58
+# upstream['rho'] = 1.0000
+# upstream['v'] = 11.902177
 # upstream['pg'] = 1.
-# upstream['pc'] = 1.
+# upstream['pc'] = 0.33512
 # upstream['B'] = 1.
 
-alter = gas_to_mn(upstream['rho'], upstream['pg'], upstream['v'], upstream['pc'])
+kappa = 0.1
 
-shock = Shock(upstream['rho'], upstream['pg'], upstream['v'], upstream['pc'])
-# downstream = shock.solution()
+alter_up = gas_to_mn(upstream['rho'], upstream['pg'], upstream['v'], upstream['pc'])
+
+shock = Shock(upstream['rho'], upstream['pg'], upstream['v'], upstream['pc'], kappa)
+downstream = shock.solution()
+alter_down = gas_to_mn(downstream['rho'], downstream['pg'], downstream['v'], downstream['pc'])
+
 
 # Plot diagram
 fig = shock.shock_diagram(don_want_axis=False)
-fig.savefig('./sh_struct.png', dpi=300)
+fig.savefig('./sh_struct_diff.png', dpi=300)
 plt.show(fig)
 
+# Plot shock profile
+# shkfig, convfig = shock.plotprofile(compare='./shock.hdf5', mode=0)
+shkfig, convfig = shock.plotprofile(mode=2)
+shkfig.savefig('./sh_profile_diff.png', dpi=300)
+convfig.savefig('./sh_conv_diff.png', dpi=300)
+plt.show()
+
 plt.close('all')
+
+# rho1 = 1.
+# pg1 = 1.
+# m1 = 6. 
+# n1 = np.linspace(0.01, 0.99, 100)
+
+# fig = plt.figure()
+# ax = fig.add_subplot(111)
+# ax.set_title('Mach = {}'.format(m1))
+
+# for i, n in enumerate(n1):
+#   upstream = mn_to_gas(rho1, pg1, m1, n)
+#   shock = Shock(upstream['rho'], upstream['pg'], upstream['v'], upstream['pc']) 
+#   downstream = shock.solution()
+#   pc_frac = downstream['pc']/shock.M 
+#   for j, frac in enumerate(pc_frac):
+#     ax.scatter(n, frac, color='k')
+
+# ax.margins(x=0)
+# ax.set_ylim(0, 1)
+# ax.set_xlabel('$N$')
+# ax.set_ylabel('$\\frac{P_{c2}}{\\rho_1 v_1^2 + P_{g1} + P_{c1}}$')
+
+# fig.tight_layout()
+# plt.show(fig)
+# plt.close('all')
+
