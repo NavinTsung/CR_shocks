@@ -876,9 +876,9 @@ class Shock:
 
     int_bin = 5000
     yf = vf/self.v
-    y_int = np.linspace(0.9999, yf, int_bin)
+    y_int = np.linspace(0.9999, 1.0001*yf, int_bin)
     dxdy = lambda y, x: ldiff*self.D(y)/((1. - y)*self.N(y))
-    sol = integrate.solve_ivp(dxdy, [y_int[0], 0.9999*y_int[-1]], [0.], t_eval=y_int) # 0.9999 to ensure t_span encompasses y_int
+    sol = integrate.solve_ivp(dxdy, [y_int[0], yf], [0.], t_eval=y_int) # 0.9999 to ensure t_span encompasses y_int
     x_int = sol.y[0]
 
     rho_int = self.J/(self.v*y_int) 
@@ -954,6 +954,7 @@ class Shock:
       self.runprofile2 = True
     return
 
+  # Plot shock profile
   def plotprofile(self, compare=None, old_solution=True, mode=1):
     mode_num = mode
     if old_solution and (self.runprofile == False):
@@ -1071,23 +1072,135 @@ class Shock:
 
     return (fig, fig2)
 
-      
+  # Evaluate data for Athena++ input
+  def athinput(self, grid, old_solution=True, mode=0, nghost=2):
+    ldiff = self.kappa/self.v 
+    if old_solution:
+      vf = self.v_adrefhugzeros[mode] if np.size(self.v_adrefhugzeros) != 0 else self.v_adhugzeros[0]
+    else:
+      vf = self.v_adref2hugzeros[mode] if np.size(self.v_adref2hugzeros) != 0 else self.v_adhug2zeros[0] 
+
+    if np.size(vf) == 0:
+      print('No solution')
+      return 
+
+    # Prepare by calculating what the shock width would be
+    totgrid = grid + 2*nghost
+    pre_bin = 4*totgrid
+    yf = vf/self.v
+    y_pre = np.linspace(0.9999, 1.0001*yf, pre_bin)
+    dxdy = lambda y, x: ldiff*self.D(y)/((1. - y)*self.N(y))
+    sol = integrate.solve_ivp(dxdy, [y_pre[0], yf], [0.], t_eval=y_pre) # 0.9999 to ensure t_span encompasses y_int
+    x_pre = sol.y[0]
+
+    y_ath = np.zeros(totgrid)
+    rho_ath = np.zeros(totgrid)
+    v_ath = np.zeros(totgrid)
+    pg_ath = np.zeros(totgrid)
+    pc_ath = np.zeros(totgrid)
+    fc_ath = np.zeros(totgrid)
+    if old_solution and (np.size(self.v_adrefhugzeros) != 0):
+      x0 = x_pre[0]
+      xmid = x_pre[-1]
+      x1 = 4.*(xmid - x0)/3. + x0
+      x_ath = np.linspace(x0, x1, totgrid)
+      dx = (x1 - x0)/(totgrid - 1)
+      mid_index = np.argmin(np.abs(x_ath - xmid))
+      mid_index = mid_index if x_ath[mid_index] < xmid else mid_index - 1
+      y_ath[0:(mid_index+1)] = np.interp(x_ath[0:(mid_index+1)], x_pre, y_pre)
+
+      # Values in the compressive region
+      rho_ath[0:(mid_index+1)] = self.J/(self.v*y_ath[0:(mid_index+1)]) 
+      v_ath[0:(mid_index+1)] = self.v*y_ath[0:(mid_index+1)]
+      pg_ath[0:(mid_index+1)] = self.pg*np.array([self.adiabat(y) for i, y in enumerate(y_ath[0:(mid_index+1)])])
+      pc_ath[0:(mid_index+1)] = self.M - self.J*self.v*y_ath[0:(mid_index+1)] - pg_ath[0:(mid_index+1)]
+      fc_ath[0:(mid_index+1)] = self.E - 0.5*self.J*(self.v*y_ath[0:(mid_index+1)])**2 - (gamma_g/(gamma_g - 1.))*pg_ath[0:(mid_index+1)]*self.v*y_ath[0:(mid_index+1)]
+
+      # Downstream solution after subshock
+      v2 = self.v_final[mode]
+      rho2 = self.J/v2
+      pg2 = self.pg*self.hugoniot(v2/self.v)
+      pc2 = self.M - self.J*v2 - pg2 
+      fc2 = self.E - 0.5*self.J*v2**2 - (gamma_g/(gamma_g - 1.))*pg2*v2
+
+      rho_ath[(mid_index+1):] = rho2 
+      v_ath[(mid_index+1):] = v2 
+      pg_ath[(mid_index+1):] = pg2
+      pc_ath[(mid_index+1):] = pc2 
+      fc_ath[(mid_index+1):] = fc2
+    elif (old_solution == False) and (np.size(self.v_adref2hugzeros) != 0):
+      x0 = x_pre[0]
+      xmid = x_pre[-1]
+      x1 = 4.*(xmid - x0)/3. + x0 
+      x_ath = np.linspace(x0, x1, totgrid)
+      dx = (x1 - x0)/(totgrid - 1)
+      mid_index = np.argmin(np.abs(x_ath - xmid))
+      mid_index = mid_index if x_ath[mid_index] < xmid else mid_index - 1
+      y_ath[0:(mid_index+1)] = np.interp(x_ath[0:(mid_index+1)], x_pre, y_pre)
+
+      # Values in the compressive region
+      rho_ath[0:(mid_index+1)] = self.J/(self.v*y_ath[0:(mid_index+1)]) 
+      v_ath[0:(mid_index+1)] = self.v*y_ath[0:(mid_index+1)]
+      pg_ath[0:(mid_index+1)] = self.pg*np.array([self.adiabat(y) for i, y in enumerate(y_ath[0:(mid_index+1)])])
+      pc_ath[0:(mid_index+1)] = self.M - self.J*self.v*y_ath[0:(mid_index+1)] - pg_ath[0:(mid_index+1)]
+      fc_ath[0:(mid_index+1)] = self.E - 0.5*self.J*(self.v*y_ath[0:(mid_index+1)])**2 - (gamma_g/(gamma_g - 1.))*pg_ath[0:(mid_index+1)]*self.v*y_ath[0:(mid_index+1)]
+
+      # Downstream solution after subshock
+      v2 = self.v_final2[mode]
+      rho2 = self.J/v2
+      pg2 = self.pg*self.hugoniot2(v2/self.v)
+      pc2 = self.M - self.J*v2 - pg2 
+      fc2 = self.E - 0.5*self.J*v2**2 - (gamma_g/(gamma_g - 1.))*pg2*v2
+
+      rho_ath[(mid_index+1):] = rho2 
+      v_ath[(mid_index+1):] = v2 
+      pg_ath[(mid_index+1):] = pg2
+      pc_ath[(mid_index+1):] = pc2 
+      fc_ath[(mid_index+1):] = fc2
+    else:
+      x0 = x_pre[0]
+      x1 = x_pre[-1]
+      x_ath = np.linspace(x0, x1, totgrid)
+      dx = (x1 - x0)/(totgrid - 1)
+      y_ath = np.interp(x_ath, x_pre, y_pre)
+
+      # Values in the compressive region
+      rho_ath = self.J/(self.v*y_ath) 
+      v_ath = self.v*y_ath
+      pg_ath = self.pg*np.array([self.adiabat(y) for i, y in enumerate(y_ath)])
+      pc_ath = self.M - self.J*self.v*y_ath - pg_ath
+      fc_ath = self.E - 0.5*self.J*(self.v*y_ath)**2 - (gamma_g/(gamma_g - 1.))*pg_ath*self.v*y_ath
+
+    # Shifting to accommodate for ghost zones
+    x_ath = x_ath - (nghost - 0.5)*dx
+
+    # Save data to memory
+    self.xinner = x_ath[0] + (nghost - 0.5)*dx
+    self.xouter = x_ath[-1] - (nghost - 0.5)*dx 
+    self.dx = dx
+    self.x_ath = x_ath
+    self.rho_ath = rho_ath
+    self.v_ath = v_ath
+    self.pg_ath = pg_ath 
+    self.pc_ath = pc_ath 
+    self.fc_ath = fc_ath
+    return 
 # End of class
 
 ###########################################
-# rho1 = 1000.
-# pg1 = 1.
-# m1 = 30.
-# n1 = 0.5
-# beta1 = 2.
-# upstream = mnbeta_to_gas(rho1, pg1, m1, n1, beta1)
+rho1 = 1.
+pg1 = 1.
+m1 = 5.
+n1 = 0.5
+beta1 = 1.
+upstream = mnbeta_to_gas(rho1, pg1, m1, n1, beta1)
 
-upstream = {}
-upstream['rho'] = 1000.
-upstream['v'] = 2.
-upstream['pg'] = 1.
-upstream['pc'] = 1.
-upstream['B'] = 1.41
+# upstream = {}
+# upstream['rho'] = 1000.0093383789062
+# upstream['v'] = 2.6630972341363064
+# upstream['pg'] = 1.0006976127624512
+# upstream['pc'] = 1.071060339609782
+# upstream['B'] = 1.4140000343322754
 
 kappa = 0.1
 
@@ -1105,13 +1218,13 @@ fig.savefig('./sh_struct_stream.png', dpi=300)
 plt.show(fig)
 
 # Plot shock profile
-# shkfig, convfig = shock.plotprofile(compare='./shock.hdf5')
-# shkfig, convfig = shock.plotprofile(compare='./shock.hdf5', old_solution=False)
+# shkfig, convfig = shock.plotprofile(compare='./shock.hdf5', old_solution=False, mode=2)
 shkfig, convfig = shock.plotprofile(old_solution=False, mode=0)
 shkfig.savefig('./sh_profile_stream.png', dpi=300)
 convfig.savefig('./sh_conv_stream.png', dpi=300)
 plt.show() 
 
+shock.athinput(4096, old_solution=False, mode=0, nghost=2)
 plt.close('all')
 
 # rho1 = 1.
