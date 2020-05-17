@@ -21,6 +21,46 @@ plt.rcParams['font.family'] = 'STIXGeneral'
 gamma_g = 5./3.
 gamma_c = 4./3.
 
+def plotdefault():
+  plt.rcParams.update(plt.rcParamsDefault)
+  plt.rcParams['font.size'] = 12
+  plt.rcParams['legend.fontsize'] = 12
+  plt.rcParams['legend.loc'] = 'best'
+  plt.rcParams['lines.linewidth'] = 1.5
+  plt.rcParams['lines.markersize'] = 2.
+  plt.rcParams['mathtext.fontset'] = 'stix'
+  plt.rcParams['font.family'] = 'STIXGeneral'
+  return
+
+def latexify(columns=2):
+  """
+  Set up matplotlib's RC params for LaTeX plotting.
+  Call this before plotting a figure.
+  Parameters
+  ----------
+  columns : {1, 2}
+  """
+  assert(columns in [1, 2])
+
+  fig_width_pt = 240.0 if (columns == 1) else 504.0
+  inches_per_pt = 1./72.27 # Convert pt to inch
+  golden_mean = (np.sqrt(5.) - 1.)/2. 
+  fig_width = fig_width_pt*inches_per_pt # Width in inches
+  fig_height = fig_width*golden_mean # Height in inches
+  fig_size = [fig_width, fig_height]
+
+  plt.rcParams['pdf.fonttype'] = 42
+  plt.rcParams['ps.fonttype'] = 42
+  plt.rcParams['font.size'] = 8
+  plt.rcParams['axes.labelsize'] = 8
+  plt.rcParams['axes.titlesize'] = 8
+  plt.rcParams['xtick.labelsize'] = 8
+  plt.rcParams['ytick.labelsize'] = 8
+  plt.rcParams['legend.fontsize'] = 8
+  plt.rcParams['figure.figsize'] = fig_size
+  plt.rcParams['figure.titlesize'] = 12
+  return 
+
 # Returns upstream rho, v, pg, pc
 def mnbeta_to_gas(rho, pg, m, n, beta):
   B = np.sqrt(2.*pg/beta)
@@ -365,7 +405,7 @@ class Shock:
       else:
         adrefhug = lambda y: self.adiabat(y) - self.ref2hug2(y)
       y_sol = self.find_root(lower, upper, adrefhug)
-      if np.size(self.v_ver) != 0:
+      if np.size(self.v_ver2) != 0:
         if self.use_ref2hug:
           adrefhug2 = lambda y: self.adiabat(y) - self.ref2hug2(y)
         else:
@@ -381,6 +421,12 @@ class Shock:
             delete_index = np.append(delete_index, i)
         y_sol2 = np.delete(y_sol2, delete_index) if np.size(delete_index) != 0 else y_sol2
         y_sol = np.append(y_sol, y_sol2)
+      # Eliminate solution for which y < v_adrefhugzero/v
+      delete_index2 = np.array([], dtype=int)
+      for i, ys in enumerate(y_sol):
+        if ys < self.v_adhugzeros[0]/self.v:
+          delete_index2 = np.append(delete_index2, i)
+      y_sol = np.delete(y_sol, delete_index2) if np.size(delete_index2) !=0 else y_sol 
       out = {}
       out['v_adrefhugzeros'] = y_sol*self.v 
       out['v_final'] = np.array([])
@@ -708,7 +754,7 @@ class Shock:
       pg2 = self.pg*self.hugoniot(v2/self.v)
       pc2 = self.M - self.J*v2 - pg2 
     else:
-      print('No solution')
+      print('No solution uni-directional streaming')
       v2 = np.array([])
       rho2 = np.array([])
       pg2 = np.array([])
@@ -727,13 +773,13 @@ class Shock:
       rho2 = self.J/v2
       pg2 = self.pg*self.hugoniot2(v2/self.v)
       pc2 = self.M - self.J*v2 - pg2 
-    elif np.size(self.v_adhug2zeros) != 0:
+    elif (np.size(self.v_adhug2zeros) != 0) and (self.v_adhug2zeros[0] > self.v_adhugzeros[0]):
       v2 = self.v_adhug2zeros
       rho2 = self.J/v2 
       pg2 = self.pg*self.hugoniot2(v2/self.v)
       pc2 = self.M - self.J*v2 - pg2 
     else:
-      print('No solution')
+      print('No solution to bi-directional streaming')
       v2 = np.array([])
       rho2 = np.array([])
       pg2 = np.array([])
@@ -854,6 +900,8 @@ class Shock:
     
     ax.set_xlim(0, self.v_pgzero)
     ax.set_ylim(0, self.M)
+    ax.set_xlabel('$v$')
+    ax.set_ylabel('$P_g$')
     ax.margins(x=0, y=0)
     ax.legend(frameon=False)
 
@@ -955,7 +1003,7 @@ class Shock:
     return
 
   # Plot shock profile
-  def plotprofile(self, compare=None, old_solution=True, mode=1):
+  def plotprofile(self, compare=None, old_solution=True, mode=0):
     mode_num = mode
     if old_solution and (self.runprofile == False):
       self.profile(mode=mode_num)
@@ -1073,7 +1121,15 @@ class Shock:
     return (fig, fig2)
 
   # Evaluate data for Athena++ input
-  def athinput(self, grid, old_solution=True, mode=0, nghost=2):
+  def athinput(self, grid, block, old_solution=True, mode=0, nghost=2):
+    if (grid%block != 0):
+      print('Grid not evenly divisible by block!')
+      return
+    else:
+      num_block = grid//block
+      size_block = block
+      block_id = np.arange(num_block)
+
     ldiff = self.kappa/self.v 
     if old_solution:
       vf = self.v_adrefhugzeros[mode] if np.size(self.v_adrefhugzeros) != 0 else self.v_adhugzeros[0]
@@ -1174,6 +1230,37 @@ class Shock:
     # Shifting to accommodate for ghost zones
     x_ath = x_ath - (nghost - 0.5)*dx
 
+    # Process the data into format that can be input into Athena++
+    x_input = np.zeros((num_block, block+2*nghost))
+    rho_input = np.zeros((num_block, block+2*nghost))
+    v_input = np.zeros((num_block, block+2*nghost))
+    pg_input = np.zeros((num_block, block+2*nghost))
+    pc_input = np.zeros((num_block, block+2*nghost))
+    fc_input = np.zeros((num_block, block+2*nghost))
+
+    for i in np.arange(num_block):
+      # Fill the active zones
+      x_input[i, nghost:(nghost+block)] = x_ath[i*block:(i+1)*block]
+      rho_input[i, nghost:(nghost+block)] = rho_ath[i*block:(i+1)*block] 
+      v_input[i, nghost:(nghost+block)] = v_ath[i*block:(i+1)*block]
+      pg_input[i, nghost:(nghost+block)] = pg_ath[i*block:(i+1)*block]
+      pc_input[i, nghost:(nghost+block)] = pc_ath[i*block:(i+1)*block]
+      fc_input[i, nghost:(nghost+block)] = fc_ath[i*block:(i+1)*block]
+
+      # Fill the ghost zones
+      x_input[i, 0:nghost] = x_ath[0:nghost]
+      x_input[i, -nghost:] = x_ath[-nghost:]
+      rho_input[i, 0:nghost] = rho_ath[0:nghost]
+      rho_input[i, -nghost:] = rho_ath[-nghost:]
+      v_input[i, 0:nghost] = v_ath[0:nghost]
+      v_input[i, -nghost:] = v_ath[-nghost:]
+      pg_input[i, 0:nghost] = pg_ath[0:nghost]
+      pg_input[i, -nghost:] = pg_ath[-nghost:]
+      pc_input[i, 0:nghost] = pc_ath[0:nghost]
+      pc_input[i, -nghost:] = pc_ath[-nghost:]
+      fc_input[i, 0:nghost] = fc_ath[0:nghost]
+      fc_input[i, -nghost:] = fc_ath[-nghost:]
+
     # Save data to memory
     self.xinner = x_ath[0] + (nghost - 0.5)*dx
     self.xouter = x_ath[-1] - (nghost - 0.5)*dx 
@@ -1184,25 +1271,33 @@ class Shock:
     self.pg_ath = pg_ath 
     self.pc_ath = pc_ath 
     self.fc_ath = fc_ath
+    self.x_input = x_input
+    self.rho_input = rho_input
+    self.v_input = v_input
+    self.pg_input = pg_input
+    self.pc_input = pc_input 
+    self.fc_input = fc_input
     return 
 # End of class
 
 ###########################################
-rho1 = 1.
+plotdefault()
+
+rho1 = 100.
 pg1 = 1.
-m1 = 5.
+m1 = 25.
 n1 = 0.5
 beta1 = 1.
 upstream = mnbeta_to_gas(rho1, pg1, m1, n1, beta1)
 
 # upstream = {}
-# upstream['rho'] = 1000.0093383789062
-# upstream['v'] = 2.6630972341363064
-# upstream['pg'] = 1.0006976127624512
-# upstream['pc'] = 1.071060339609782
-# upstream['B'] = 1.4140000343322754
+# upstream['rho'] = 1.
+# upstream['v'] = 3.773674740702088
+# upstream['pg'] = 1.0
+# upstream['pc'] = 1.0
+# upstream['B'] = 1.4142135381698608
 
-kappa = 0.1
+kappa = 1.
 
 alter = gas_to_mnbeta(upstream['rho'], upstream['pg'], upstream['v'], upstream['pc'], upstream['B'])
 
@@ -1218,42 +1313,264 @@ fig.savefig('./sh_struct_stream.png', dpi=300)
 plt.show(fig)
 
 # Plot shock profile
-# shkfig, convfig = shock.plotprofile(compare='./shock.hdf5', old_solution=False, mode=2)
-shkfig, convfig = shock.plotprofile(old_solution=False, mode=0)
+# shkfig, convfig = shock.plotprofile(compare='./shock.hdf5', old_solution=False, mode=0)
+shkfig, convfig = shock.plotprofile(old_solution=True, mode=0)
 shkfig.savefig('./sh_profile_stream.png', dpi=300)
 convfig.savefig('./sh_conv_stream.png', dpi=300)
 plt.show() 
 
-shock.athinput(4096, old_solution=False, mode=0, nghost=2)
+# First argument: total number of cells; Second argument: number of cells per meshblock
+shock.athinput(2048, 64, old_solution=True, mode=0, nghost=2)
+with h5py.File('./shock_still.hdf5', 'w') as fp:
+  dset = fp.create_dataset('x', data=shock.x_input)
+  dset = fp.create_dataset('rho', data=shock.rho_input)
+  dset = fp.create_dataset('v', data=shock.v_input)
+  dset = fp.create_dataset('pg', data=shock.pg_input)
+  dset = fp.create_dataset('ec', data=shock.pc_input/(gamma_c - 1.))
+  dset = fp.create_dataset('fc', data=shock.fc_input)
+  fp.attrs.create('B', shock.B )
+
+# print('rho0 = {}'.format(shock.rho))
+# print('v0 = {}'.format(shock.v))
+# print('pg0 = {}'.format(shock.pg))
+# print('ec0 = {}'.format(shock.pc/(gamma_c - 1.)))
+# print('drhodx = {}'.format(np.gradient(shock.rho_ath, shock.x_ath)[0]))
+# print('dvdx = {}'.format(np.gradient(shock.v_ath, shock.x_ath)[0]))
+# print('dpgdx = {}'.format(np.gradient(shock.pg_ath, shock.x_ath)[0]))
+# print('decdx = {}'.format(np.gradient(shock.pc_ath, shock.x_ath)[0]/(gamma_c - 1.)))
+
 plt.close('all')
 
+# Section for acceleration efficiency
 # rho1 = 1.
 # pg1 = 1.
-# m1 = np.logspace(0, 2, 100) 
+# m1 = 1.5
 # n1 = 0.5
-# beta1 = 1000.
+# beta1 = np.logspace(-1, 3, 100)
+# kappa = 1.
+
+# # Plot acceleration efficiency
+# efficiency = np.array([])
+# beta_eff = np.array([])
+# for i, beta in enumerate(beta1):
+#   print(i)
+#   upstream = mnbeta_to_gas(rho1, pg1, m1, n1, beta)
+#   shock = Shock(upstream['rho'], upstream['pg'], upstream['v'], upstream['pc'], upstream['B'], kappa) 
+#   downstream = shock.solution2()
+#   rho1 = shock.rho 
+#   rho2 = downstream['rho']
+#   va1 = shock.B/np.sqrt(rho1)
+#   va2 = shock.B/np.sqrt(rho2)
+#   v1 = shock.v 
+#   v2 = downstream['v']
+#   pc1 = shock.pc 
+#   pc2 = downstream['pc']
+#   eta = (gamma_c/(gamma_c - 1.))*((v2 + va2)*pc2 - (v1 - va1)*pc1)/(0.5*rho1*v1**3 - 0.5*rho2*v2**3)
+#   for j, eff in enumerate(eta):
+#     beta_eff = np.append(beta_eff, beta)
+#     efficiency = np.append(efficiency, eff)
 
 # fig = plt.figure()
 # ax = fig.add_subplot(111)
-# ax.set_title('N = {0}, $\\beta$ = {1}'.format(n1, beta1))
+# ax.set_title('M = {:.1f}, N = {:.1f}'.format(m1, n1))
 
-# for i, m in enumerate(m1):
-#   print(i)
-#   upstream = mnbeta_to_gas(rho1, pg1, m, n1, beta1)
-#   shock = Shock(upstream['rho'], upstream['pg'], upstream['v'], upstream['pc'], upstream['B']) 
-#   downstream = shock.solution()
-#   vel_frac = downstream['v']/shock.v
-#   pc_frac = downstream['pc']/shock.M 
-#   pg_frac = downstream['pg']/shock.M
-#   for j, frac in enumerate(pc_frac):
-#     ax.scatter(m, vel_frac[j], color='b')
-#     ax.scatter(m, pc_frac[j], color='g')
-#     ax.scatter(m, pg_frac[j], color='r')
+# ax.scatter(beta_eff, efficiency)
 
 # ax.margins(x=0)
-# ax.set_ylim(0, 1)
-# ax.set_xlabel('$M$')
+# ax.set_ylim(0)
+# ax.set_xlabel('$\\beta$')
+# ax.set_ylabel('$\\eta_s$')
+# ax.yaxis.set_minor_locator(AutoMinorLocator())
+# ax.set_xscale('log')
 
 # fig.tight_layout()
+# fig.savefig('/Users/tsunhinnavintsung/Box/Share/Shock2/stream_eff_m{:.1f}_n{:.1f}.png'.format(m1, n1), dpi=300)
+# plt.show(fig)
+# plt.close('all')
+
+# Section for Pc/Total momentum flux against N 
+# rho1 = 1.
+# pg1 = 1.
+# m1 = 20.
+# n1 = np.linspace(0.01, 0.99, 100)
+# beta1 = 1000.
+# kappa = 1.
+
+# fig = plt.figure()
+# ax = fig.add_subplot(111)
+# ax.set_title('M = {0}, $\\beta$ = {1}'.format(m1, beta1))
+
+# for i, n in enumerate(n1):
+#   print(i)
+#   upstream = mnbeta_to_gas(rho1, pg1, m1, n, beta1)
+#   shock = Shock(upstream['rho'], upstream['pg'], upstream['v'], upstream['pc'], upstream['B'], kappa) 
+#   downstream = shock.solution()
+#   downstream2 = shock.solution2()
+#   pc_frac = downstream['pc']/shock.M
+#   pc_frac2 = downstream2['pc']/shock.M 
+#   for j, frac in enumerate(pc_frac):
+#     if (i == 0) and (j == 0):
+#       ax.scatter(n, frac, color='k', label='Old sol.')
+#     else:
+#       ax.scatter(n, frac, color='k')
+#   for k, frac2 in enumerate(pc_frac2): 
+#     if (i == 0) and (k == 0):
+#       ax.scatter(n, frac2, marker='*', color='b', label='New sol.')
+#     else:
+#       ax.scatter(n, frac2, marker='*', color='b')
+
+# ax.legend(frameon=False)
+# ax.margins(x=0)
+# ax.set_ylim(0, 1)
+# ax.set_xlabel('$N$')
+# ax.set_ylabel('$\\frac{P_{c2}}{\\rho_1 v_1^2 + P_{g1} + P_{c1}}$')
+
+# fig.tight_layout()
+# # fig.savefig('/Users/tsunhinnavintsung/Box/Share/Shock2/stream_m{:.1f}_b{:.1f}.png'.format(m1, beta1), dpi=300)
+# plt.show(fig)
+# plt.close('all')
+
+############################################
+# Plots for publication
+
+# Pc/P_tot against N for different M and beta
+# rho1 = 1.
+# pg1 = 1.
+# m1 = np.array([2., 5., 10., 15.])
+# n1 = np.linspace(0.01, 0.99, 100)
+# beta1 = np.array([1., 5., 20., 1000.])
+# kappa = 1.
+
+# latexify(columns=2)
+# fig = plt.figure()
+# grids = gs.GridSpec(4, 4, figure=fig, hspace=0, wspace=0)
+# ax11 = fig.add_subplot(grids[0, 0])
+# ax21 = fig.add_subplot(grids[1, 0])
+# ax31 = fig.add_subplot(grids[2, 0])
+# ax41 = fig.add_subplot(grids[3, 0])
+
+# ax12 = fig.add_subplot(grids[0, 1])
+# ax22 = fig.add_subplot(grids[1, 1])
+# ax32 = fig.add_subplot(grids[2, 1])
+# ax42 = fig.add_subplot(grids[3, 1])
+
+# ax13 = fig.add_subplot(grids[0, 2])
+# ax23 = fig.add_subplot(grids[1, 2])
+# ax33 = fig.add_subplot(grids[2, 2])
+# ax43 = fig.add_subplot(grids[3, 2])
+
+# ax14 = fig.add_subplot(grids[0, 3])
+# ax24 = fig.add_subplot(grids[1, 3])
+# ax34 = fig.add_subplot(grids[2, 3])
+# ax44 = fig.add_subplot(grids[3, 3])
+
+# for num, axes in enumerate(fig.axes):
+#   i = num//4
+#   j = num%4
+#   for k, n in enumerate(n1):
+#     print(i, j, k)
+#     upstream = mnbeta_to_gas(rho1, pg1, m1[i], n, beta1[j])
+#     shock = Shock(upstream['rho'], upstream['pg'], upstream['v'], upstream['pc'], upstream['B'], kappa) 
+#     downstream = shock.solution()
+#     downstream2 = shock.solution2()
+#     pc_frac = downstream['pc']/shock.M
+#     pc_frac2 = downstream2['pc']/shock.M 
+#     for r, frac in enumerate(pc_frac):
+#       axes.scatter(n, frac, color='k')
+#     for s, frac2 in enumerate(pc_frac2): 
+#       axes.scatter(n, frac2, marker='*', color='b')
+
+#   axes.xaxis.set_minor_locator(AutoMinorLocator())
+#   axes.yaxis.set_minor_locator(AutoMinorLocator())
+#   if axes in [ax11, ax21, ax31]:
+#     axes.set_ylabel('$\\beta = ${:.1f}'.format(beta1[j]))
+#     axes.set_xticks([])
+#   elif axes in [ax42, ax43, ax44]:
+#     axes.set_xlabel('$M = ${:.1f}'.format(m1[i]))
+#     axes.set_yticks([])
+#   elif axes == ax41:
+#     axes.set_xlabel('$M = ${:.1f}'.format(m1[i]))
+#     axes.set_ylabel('$\\beta = ${:.1f}'.format(beta1[j]))
+#   else:
+#     axes.set_xticks([])
+#     axes.set_yticks([])
+
+# fig.tight_layout()
+# fig.savefig('/Users/tsunhinnavintsung/Box/Share/Shock2/stream_pc.png', dpi=300)
+# plt.show(fig)
+# plt.close('all')
+# plotdefault()
+
+
+
+# Plot acceleration efficiency
+# rho1 = 1.
+# pg1 = 1.
+# m1 = np.array([2., 3., 4., 6., 10., 15.])
+# n1 = 0.5
+# beta1 = np.logspace(-1, 3, 200)
+# kappa = 1.
+
+# latexify(columns=1)
+# fig = plt.figure()
+# fig2 = plt.figure()
+# ax = fig.add_subplot(111)
+# ax2 = fig2.add_subplot(111)
+
+# for k, m in enumerate(m1):
+#   efficiency1 = np.array([])
+#   efficiency2 = np.array([])
+#   beta_eff1 = np.array([])
+#   beta_eff2 = np.array([])
+#   for i, beta in enumerate(beta1):
+#     print(i)
+#     upstream = mnbeta_to_gas(rho1, pg1, m, n1, beta)
+#     shock = Shock(upstream['rho'], upstream['pg'], upstream['v'], upstream['pc'], upstream['B'], kappa) 
+#     downstream = shock.solution()
+#     downstream2 = shock.solution2()
+#     rho = shock.rho
+#     rho_1 = downstream['rho']
+#     rho_2 = downstream2['rho']
+#     va = shock.B/np.sqrt(rho)
+#     va_1 = shock.B/np.sqrt(rho_1)
+#     va_2 = shock.B/np.sqrt(rho_2)
+#     v = shock.v
+#     v_1 = downstream['v']
+#     v_2 = downstream2['v']
+#     pc = shock.pc
+#     pc_1 = downstream['pc']
+#     pc_2 = downstream2['pc']
+#     eta_1 = (gamma_c/(gamma_c - 1.))*((v_1 - va_1)*pc_1 - (v - va)*pc)/(0.5*rho*v**3 - 0.5*rho_1*v_1**3)
+#     eta_2 = (gamma_c/(gamma_c - 1.))*((v_2 + va_2)*pc_2 - (v - va)*pc)/(0.5*rho*v**3 - 0.5*rho_2*v_2**3)
+#     for j, eff in enumerate(eta_1):
+#       beta_eff1 = np.append(beta_eff1, beta)
+#       efficiency1 = np.append(efficiency1, eff)
+#     for j, eff in enumerate(eta_2):
+#       beta_eff2 = np.append(beta_eff2, beta)
+#       efficiency2 = np.append(efficiency2, eff)
+
+#   ax.scatter(beta_eff1, efficiency1, label='{:.1f}'.format(m))
+#   ax2.scatter(beta_eff2, efficiency2, marker='*', label='{:.1f}'.format(m))
+
+# ax.margins(x=0)
+# ax.set_ylim(0)
+# ax.set_xlabel('$\\beta$')
+# ax.set_ylabel('$\\eta_s$')
+# ax.yaxis.set_minor_locator(AutoMinorLocator())
+# ax.set_xscale('log')
+# ax.legend(bbox_to_anchor=(1.04,1), loc="upper left")
+
+# ax2.margins(x=0)
+# ax2.set_ylim(0)
+# ax2.set_xlabel('$\\beta$')
+# ax2.set_ylabel('$\\eta_s$')
+# ax2.yaxis.set_minor_locator(AutoMinorLocator())
+# ax2.set_xscale('log')
+# ax2.legend(bbox_to_anchor=(1.04,1), loc="upper left")
+
+# fig.tight_layout()
+# fig2.tight_layout()
+# fig.savefig('/Users/tsunhinnavintsung/Box/Share/Shock2/stream_eff_old.png'.format(m1, n1), dpi=300)
+# fig2.savefig('/Users/tsunhinnavintsung/Box/Share/Shock2/stream_eff_new.png'.format(m1, n1), dpi=300)
 # plt.show(fig)
 # plt.close('all')
