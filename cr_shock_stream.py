@@ -49,14 +49,16 @@ def latexify(columns=2):
   fig_height = fig_width*golden_mean # Height in inches
   fig_size = [fig_width, fig_height]
 
+  font_size = 10 if columns == 1 else 8
+
   plt.rcParams['pdf.fonttype'] = 42
   plt.rcParams['ps.fonttype'] = 42
-  plt.rcParams['font.size'] = 8
-  plt.rcParams['axes.labelsize'] = 8
-  plt.rcParams['axes.titlesize'] = 8
-  plt.rcParams['xtick.labelsize'] = 8
-  plt.rcParams['ytick.labelsize'] = 8
-  plt.rcParams['legend.fontsize'] = 8
+  plt.rcParams['font.size'] = font_size
+  plt.rcParams['axes.labelsize'] = font_size
+  plt.rcParams['axes.titlesize'] = font_size
+  plt.rcParams['xtick.labelsize'] = font_size
+  plt.rcParams['ytick.labelsize'] = font_size
+  plt.rcParams['legend.fontsize'] = font_size
   plt.rcParams['figure.figsize'] = fig_size
   plt.rcParams['figure.titlesize'] = 12
   return 
@@ -481,6 +483,13 @@ class Shock:
     part5 = (gamma_g - gamma_c)*np.sqrt(y)/(gamma_g - 1.) + gamma_c/ma 
     return (part1 - part2 + part3)*part4/part5 # Returns p-bar for the hugoniot
 
+  # def hugoniot2(self, y):
+  #   ms = self.ms
+  #   d = self.pc/self.pg 
+  #   part1 = gamma_c*(gamma_g - 1.)*(1. - y)/(gamma_g - gamma_c)
+  #   part2 = 1. + d - 0.5*(gamma_c + 1.)*(gamma_g*ms**2/gamma_c)*(y - (gamma_c - 1.)/(gamma_c + 1.)) 
+  #   return (1. - part1*part2)/y # Returns p-bar for the hugoniot
+
   def refhugcoeff(self):
     J = self.J 
     M = self.M 
@@ -855,46 +864,46 @@ class Shock:
       ax.plot(self.v*y_2hug, self.pg*self.hugoniot2(y_2hug), 'k--', label='Hugoniot2')
     
     if (np.size(self.v_adhugzeros) > 0):
-      ax.plot(self.v*y_adia, self.pg*self.adiabat(y_adia), label='Adiabat')
+      ax.plot(self.v*y_adia, self.pg*self.adiabat(y_adia), color='tab:green', label='Adiabat')
       ax.scatter(self.v_adhugzeros, self.pg*self.adiabat(self.v_adhugzeros/self.v), marker='o', color='k')
     if (np.size(self.v_adhug2zeros) > 0) and (self.v_adhug2zeros[0] < self.v_adhugzeros[0]):
-      ax.plot(self.v*y_adia2, self.pg*self.adiabat(y_adia2), label='Adiabat')
+      ax.plot(self.v*y_adia2, self.pg*self.adiabat(y_adia2), color='tab:green', label='Adiabat')
       ax.scatter(self.v_adhug2zeros, self.pg*self.adiabat(self.v_adhug2zeros/self.v), marker='o', color='k')
     
     if (np.size(self.v_adrefhugzeros) > 0) and (np.size(self.v_final) > 0):
       for i, v_adrefhug in enumerate(self.v_adrefhugzeros):
-        ax.plot(np.array([v_adrefhug, self.v_final[i]]), np.array([self.pg*self.adiabat(v_adrefhug/self.v), self.pg*self.hugoniot(self.v_final[i]/self.v)])) 
+        ax.plot(np.array([v_adrefhug, self.v_final[i]]), np.array([self.pg*self.adiabat(v_adrefhug/self.v), self.pg*self.hugoniot(self.v_final[i]/self.v)]), color='tab:red') 
       ax.scatter(self.v_adrefhugzeros, self.pg*self.adiabat(self.v_adrefhugzeros/self.v), marker='o', color='k')
       ax.scatter(self.v_final, self.pg*self.hugoniot(self.v_final/self.v), marker='o', color='k')
     if (np.size(self.v_adref2hugzeros) > 0) and (np.size(self.v_final2) > 0):
       for i, v_adref2hug in enumerate(self.v_adref2hugzeros):
-        ax.plot(np.array([v_adref2hug, self.v_final2[i]]), np.array([self.pg*self.adiabat(v_adref2hug/self.v), self.pg*self.hugoniot2(self.v_final2[i]/self.v)]), '--') 
+        ax.plot(np.array([v_adref2hug, self.v_final2[i]]), np.array([self.pg*self.adiabat(v_adref2hug/self.v), self.pg*self.hugoniot2(self.v_final2[i]/self.v)]), '--', color='tab:red') 
       ax.scatter(self.v_adref2hugzeros, self.pg*self.adiabat(self.v_adref2hugzeros/self.v), marker='o', color='k')
       ax.scatter(self.v_final2, self.pg*self.hugoniot2(self.v_final2/self.v), marker='o', color='k')
     
     if (np.size(self.v_hugpcmaxzeros) > 0):
       if (np.size(self.v_ver) > 0):
         if self.use_refhug:
-          ax.plot(self.v*np.append(y_ref, y_ref2[::-1]), self.pg*np.append(self.refhug(y_ref), self.refhug2(y_ref2[::-1])), label='Reflect')
+          ax.plot(self.v*np.append(y_ref, y_ref2[::-1]), self.pg*np.append(self.refhug(y_ref), self.refhug2(y_ref2[::-1])), color='tab:purple', label='Reflect')
         else:
-          ax.plot(self.v*np.append(y_ref, y_ref2[::-1]), self.pg*np.append(self.refhug2(y_ref), self.refhug(y_ref2[::-1])), label='Reflect')
+          ax.plot(self.v*np.append(y_ref, y_ref2[::-1]), self.pg*np.append(self.refhug2(y_ref), self.refhug(y_ref2[::-1])), color='tab:purple', label='Reflect')
       else:
         if self.use_refhug:
-          ax.plot(self.v*y_ref, self.pg*self.refhug(y_ref), label='Reflect')
+          ax.plot(self.v*y_ref, self.pg*self.refhug(y_ref), color='tab:purple', label='Reflect')
         else:
-          ax.plot(self.v*y_ref, self.pg*self.refhug2(y_ref), label='Reflect')
+          ax.plot(self.v*y_ref, self.pg*self.refhug2(y_ref), color='tab:purple', label='Reflect')
 
     if (np.size(self.v_hug2pcmaxzeros) > 0):
       if (np.size(self.v_ver2) > 0):
         if self.use_ref2hug:
-          ax.plot(self.v*np.append(y_2ref, y_2ref2[::-1]), self.pg*np.append(self.ref2hug(y_2ref), self.ref2hug2(y_2ref2[::-1])), '--', label='Reflect2')
+          ax.plot(self.v*np.append(y_2ref, y_2ref2[::-1]), self.pg*np.append(self.ref2hug(y_2ref), self.ref2hug2(y_2ref2[::-1])), '--', color='tab:purple', label='Reflect2')
         else:
-          ax.plot(self.v*np.append(y_2ref, y_2ref2[::-1]), self.pg*np.append(self.ref2hug2(y_2ref), self.ref2hug(y_2ref2[::-1])), '--', label='Reflect2')
+          ax.plot(self.v*np.append(y_2ref, y_2ref2[::-1]), self.pg*np.append(self.ref2hug2(y_2ref), self.ref2hug(y_2ref2[::-1])), '--', color='tab:purple', label='Reflect2')
       else:
         if self.use_ref2hug:
-          ax.plot(self.v*y_2ref, self.pg*self.ref2hug(y_2ref), '--', label='Reflect2')
+          ax.plot(self.v*y_2ref, self.pg*self.ref2hug(y_2ref), '--', color='tab:purple', label='Reflect2')
         else:
-          ax.plot(self.v*y_2ref, self.pg*self.ref2hug2(y_2ref), '--', label='Reflect2')
+          ax.plot(self.v*y_2ref, self.pg*self.ref2hug2(y_2ref), '--', color='tab:purple', label='Reflect2')
 
     ax.scatter(self.v, self.pg, marker='o', color='k')
     
@@ -903,7 +912,10 @@ class Shock:
     ax.set_xlabel('$v$')
     ax.set_ylabel('$P_g$')
     ax.margins(x=0, y=0)
-    ax.legend(frameon=False)
+    # ax.legend(frameon=False)
+
+    ax.set_xticks([])
+    ax.set_yticks([])
 
     if don_want_axis:
       ax.get_xaxis().set_visible(False)
@@ -924,7 +936,7 @@ class Shock:
 
     int_bin = 5000
     yf = vf/self.v
-    y_int = np.linspace(0.9999, 1.0001*yf, int_bin)
+    y_int = np.linspace(0.9999999999, 1.000000000000001*yf, int_bin)
     dxdy = lambda y, x: ldiff*self.D(y)/((1. - y)*self.N(y))
     sol = integrate.solve_ivp(dxdy, [y_int[0], yf], [0.], t_eval=y_int) # 0.9999 to ensure t_span encompasses y_int
     x_int = sol.y[0]
@@ -1144,7 +1156,7 @@ class Shock:
     totgrid = grid + 2*nghost
     pre_bin = 4*totgrid
     yf = vf/self.v
-    y_pre = np.linspace(0.9999, 1.0001*yf, pre_bin)
+    y_pre = np.linspace(0.99999999999999, 1.00000000000001*yf, pre_bin)
     dxdy = lambda y, x: ldiff*self.D(y)/((1. - y)*self.N(y))
     sol = integrate.solve_ivp(dxdy, [y_pre[0], yf], [0.], t_eval=y_pre) # 0.9999 to ensure t_span encompasses y_int
     x_pre = sol.y[0]
@@ -1283,21 +1295,21 @@ class Shock:
 ###########################################
 plotdefault()
 
-rho1 = 100.
+rho1 = 1000.
 pg1 = 1.
-m1 = 25.
-n1 = 0.5
+m1 = 20.
+n1 = 0.2
 beta1 = 1.
 upstream = mnbeta_to_gas(rho1, pg1, m1, n1, beta1)
 
 # upstream = {}
-# upstream['rho'] = 1.
-# upstream['v'] = 3.773674740702088
-# upstream['pg'] = 1.0
-# upstream['pc'] = 1.0
+# upstream['rho'] = 1000.00048828125
+# upstream['v'] = 1.1771465128975358
+# upstream['pg'] = 0.9996950626373291
+# upstream['pc'] = 1.2592964172363281
 # upstream['B'] = 1.4142135381698608
 
-kappa = 1.
+kappa = 0.1
 
 alter = gas_to_mnbeta(upstream['rho'], upstream['pg'], upstream['v'], upstream['pc'], upstream['B'])
 
@@ -1308,27 +1320,29 @@ down_mnbeta = gas_to_mnbeta(downstream['rho'], downstream['pg'], downstream['v']
 down_mnbeta2 = gas_to_mnbeta(downstream2['rho'], downstream2['pg'], downstream2['v'], downstream2['pc'], upstream['B'])
 
 # Plot diagram
+# latexify(columns=1)
 fig = shock.shock_diagram(don_want_axis=False)
 fig.savefig('./sh_struct_stream.png', dpi=300)
-plt.show(fig)
+plt.show()
+# plotdefault()
 
 # Plot shock profile
-# shkfig, convfig = shock.plotprofile(compare='./shock.hdf5', old_solution=False, mode=0)
-shkfig, convfig = shock.plotprofile(old_solution=True, mode=0)
+shkfig, convfig = shock.plotprofile(compare='./shock.hdf5', old_solution=False, mode=0)
+# shkfig, convfig = shock.plotprofile(old_solution=True, mode=0)
 shkfig.savefig('./sh_profile_stream.png', dpi=300)
 convfig.savefig('./sh_conv_stream.png', dpi=300)
 plt.show() 
 
-# First argument: total number of cells; Second argument: number of cells per meshblock
-shock.athinput(2048, 64, old_solution=True, mode=0, nghost=2)
-with h5py.File('./shock_still.hdf5', 'w') as fp:
-  dset = fp.create_dataset('x', data=shock.x_input)
-  dset = fp.create_dataset('rho', data=shock.rho_input)
-  dset = fp.create_dataset('v', data=shock.v_input)
-  dset = fp.create_dataset('pg', data=shock.pg_input)
-  dset = fp.create_dataset('ec', data=shock.pc_input/(gamma_c - 1.))
-  dset = fp.create_dataset('fc', data=shock.fc_input)
-  fp.attrs.create('B', shock.B )
+# # First argument: total number of cells; Second argument: number of cells per meshblock
+# shock.athinput(4096, 64, old_solution=False, mode=0, nghost=2)
+# with h5py.File('./shock_still.hdf5', 'w') as fp:
+#   dset = fp.create_dataset('x', data=shock.x_input)
+#   dset = fp.create_dataset('rho', data=shock.rho_input)
+#   dset = fp.create_dataset('v', data=shock.v_input)
+#   dset = fp.create_dataset('pg', data=shock.pg_input)
+#   dset = fp.create_dataset('ec', data=shock.pc_input/(gamma_c - 1.))
+#   dset = fp.create_dataset('fc', data=shock.fc_input)
+#   fp.attrs.create('B', shock.B )
 
 # print('rho0 = {}'.format(shock.rho))
 # print('v0 = {}'.format(shock.v))
@@ -1388,13 +1402,13 @@ plt.close('all')
 # plt.show(fig)
 # plt.close('all')
 
-# Section for Pc/Total momentum flux against N 
+# # Section for Pc/Total momentum flux against N 
 # rho1 = 1.
 # pg1 = 1.
-# m1 = 20.
-# n1 = np.linspace(0.01, 0.99, 100)
-# beta1 = 1000.
-# kappa = 1.
+# m1 = 50.
+# n1 = np.linspace(0.01, 0.99, 300)
+# beta1 = 2.
+# kappa = 0.1
 
 # fig = plt.figure()
 # ax = fig.add_subplot(111)
@@ -1406,8 +1420,8 @@ plt.close('all')
 #   shock = Shock(upstream['rho'], upstream['pg'], upstream['v'], upstream['pc'], upstream['B'], kappa) 
 #   downstream = shock.solution()
 #   downstream2 = shock.solution2()
-#   pc_frac = downstream['pc']/shock.M
-#   pc_frac2 = downstream2['pc']/shock.M 
+#   pc_frac = downstream['pc']/(shock.rho*shock.v**2)
+#   pc_frac2 = downstream2['pc']/(shock.rho*shock.v**2)
 #   for j, frac in enumerate(pc_frac):
 #     if (i == 0) and (j == 0):
 #       ax.scatter(n, frac, color='k', label='Old sol.')
@@ -1423,7 +1437,7 @@ plt.close('all')
 # ax.margins(x=0)
 # ax.set_ylim(0, 1)
 # ax.set_xlabel('$N$')
-# ax.set_ylabel('$\\frac{P_{c2}}{\\rho_1 v_1^2 + P_{g1} + P_{c1}}$')
+# ax.set_ylabel('$\\frac{P_{c2}}{\\rho_1 v_1^2}$')
 
 # fig.tight_layout()
 # # fig.savefig('/Users/tsunhinnavintsung/Box/Share/Shock2/stream_m{:.1f}_b{:.1f}.png'.format(m1, beta1), dpi=300)
@@ -1433,10 +1447,168 @@ plt.close('all')
 ############################################
 # Plots for publication
 
-# Pc/P_tot against N for different M and beta
+# # Plot non-monotonicity in path x
+# latexify(columns=1)
+# fig = plt.figure()
+# ax = fig.add_subplot(111)
+
+# ax.plot(shock.x_int, shock.rho_int) 
+# ax.set_xlabel('$x$')
+# ax.set_ylabel('$\\rho$')
+# ax.set_xticks([])
+# ax.set_yticks([])
+# ax.margins(x=0)
+
+# fig.tight_layout()
+# fig.savefig('/Users/tsunhinnavintsung/Box/Share/Publish/non_mono.png', dpi=300)
+# plt.show(fig)
+# plt.close('all')
+# plotdefault()
+
+
+
+# # Compare shock analytics and simulation
+# # Shift position of curves by finding the location of max grad pc
+# drhodx = np.gradient(shock.rho_sim, shock.x_sim)
+# dpcdx = np.gradient(shock.pc_sim, shock.x_sim)
+# x0 = shock.x_sim[np.argmax(np.abs(dpcdx))]
+# x0_int = shock.x_int[np.argmax(np.abs(np.gradient(shock.pc_int[:-1], shock.x_int[:-1])))]
+# if dpcdx[np.argmax(np.abs(dpcdx))] > 0:
+#   x_int = shock.x_int - x0_int + x0 
+#   signature = 1
+# else:
+#   x_int = -(shock.x_int - x0_int) + x0
+#   signature = -1
+
+# latexify(columns=1)
+# fig1 = plt.figure()
+# fig2 = plt.figure()
+# fig = [fig1, fig2]
+# ax1 = fig1.add_subplot(111)
+# ax2 = fig2.add_subplot(111)
+# ax = [ax1, ax2]
+
+# ax1.plot(x_int, shock.rho_int, '-o', label='$\\rho$')
+# ax2.plot(x_int, shock.pc_int, '-o', label='$P_c$')
+# ax1.plot(shock.x_sim, shock.rho_sim, '--', label='Sim')
+# ax2.plot(shock.x_sim, shock.pc_sim, '--', label='Sim')
+
+# ax1.set_ylabel('$\\rho$')
+# ax2.set_ylabel('$P_c$')
+
+# for axes in ax:
+#   axes.set_xlabel('$x$')
+#   axes.xaxis.set_minor_locator(AutoMinorLocator())
+#   axes.yaxis.set_minor_locator(AutoMinorLocator())
+#   axes.legend(frameon=False)
+
+# for i, figu in enumerate(fig):
+#   figu.tight_layout()
+#   # figu.savefig('/Users/tsunhinnavintsung/Box/Share/Publish/free_{}.png'.format(i), dpi=300)
+# plt.show()
+# plt.close('all')
+# plotdefault()
+
+
+
+# # Pc/P_tot against N for one set of parameter
+# rho1 = 1000. 
+# pg1 = 1. 
+# m1 = 15. 
+# n1 = np.linspace(0.01, 0.99, 100)
+# beta1 = 1. 
+# kappa = 0.1 
+
+# q_t = np.array([0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9])
+# t_diff = np.array([2424., 2725, 2092., 2452., 3003., 1959., 2867., 2787.])
+
+# q_old = np.array([0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9])
+# eta_up_old = np.zeros(np.size(q_old))
+# eta1_old = np.array([0.5705606187656989, 0.5835184795542948, 0.597910452659204, \
+#   0.6141650821672666, 0.6329550810085214, 0.6554453681130281, 0.6839953631732907, \
+#   0.7250716440690459])
+# eta2_old = np.array([0.5554536402824949, 0.5663263375363822, 0.5898098747942703, \
+#   0.6060709949381512, 0.6247812611797006, 0.6526192223218231, 0.6819884349713877, \
+#   0.7245896975611089])
+
+# q_new = np.array([0.5, 0.6, 0.7, 0.8, 0.9])
+# eta_up_new = np.zeros(np.size(q_new))
+# eta1_new = np.array([0.48089374889596215, 0.559162125464414, 0.612783280686031, \
+#   0.6629019830377982, 0.7194997419252992])
+# eta2_new = np.array([0.4917601275517108, 0.5696870759381972, 0.6162115546021458, \
+#   0.6665856288837653, 0.7222247058863441])
+
+# q_new1 = np.array([0.5, 0.6, 0.7])
+# eta_up_new1 = np.zeros(np.size(q_new1))
+# eta1_new1 = np.array([0.35728640141469686, 0.2656025434050776, 0.191137897915609])
+# eta2_new1 = np.array([0.5225403882553337, 0.6320887199970091, 0.650577444858814])
+
+# q_new2 = np.array([0.2, 0.3, 0.4, 0.5, 0.6, 0.7])
+# eta_up_new2 = np.zeros(np.size(q_new2))
+# eta1_new2 = np.array([0.006568164740519238, 0.010740619622377384, 0.015868588032381496, \
+#   0.022527241094393087, 0.03202416560589042, 0.04864944585002258])
+# eta2_new2 = np.array([0.006590172439589351, 0.010773589328490327, 0.015910333514280672, \
+#   0.022592266981859725, 0.03214284733136734, 0.04885696329060824])
+
+# latexify(columns=1)
+# fig = plt.figure()
+# ax = fig.add_subplot(111)
+
+# for i, n in enumerate(n1):
+#   print(i) 
+#   upstream  = mnbeta_to_gas(rho1, pg1, m1, n, beta1)
+#   shock = Shock(upstream['rho'], upstream['pg'], upstream['v'], upstream['pc'], upstream['B'], kappa) 
+#   downstream = shock.solution() 
+#   downstream2 = shock.solution2() 
+#   pc_frac = (downstream['pc'] - upstream['pc'])/(shock.J*shock.v)
+#   pc_frac2 = (downstream2['pc'] - upstream['pc'])/(shock.J*shock.v)
+#   for r, frac in enumerate(pc_frac):
+#       ax.scatter(n, frac, color='k')
+#   for s, frac2 in enumerate(pc_frac2): 
+#     ax.scatter(n, frac2, marker='*', color='b')
+
+# for i, n in enumerate(q_old):
+#   upstream = mnbeta_to_gas(rho1, pg1, m1, n, beta1)
+#   eta_up_old[i] = (pg1/(rho1*upstream['v']**2))*(n/(1. - n))
+
+# for i, n in enumerate(q_new):
+#   upstream = mnbeta_to_gas(rho1, pg1, m1, n, beta1)
+#   eta_up_new[i] = (pg1/(rho1*upstream['v']**2))*(n/(1. - n))
+
+# for i, n in enumerate(q_new1):
+#   upstream = mnbeta_to_gas(rho1, pg1, m1, n, beta1)
+#   eta_up_new1[i] = (pg1/(rho1*upstream['v']**2))*(n/(1. - n))
+
+# for i, n in enumerate(q_new2):
+#   upstream = mnbeta_to_gas(rho1, pg1, m1, n, beta1)
+#   eta_up_new2[i] = (pg1/(rho1*upstream['v']**2))*(n/(1. - n))
+
+# # ax.scatter(q_old, eta1_old, s=20, marker='o')
+# # ax.scatter(q_new, eta1_new, s=20, marker='^')
+# # ax.scatter(q_new1, eta1_new1, s=20, marker='s')
+# # ax.scatter(q_new2, eta1_new2, s=20,  marker='D')
+
+# # ax.scatter(q_old, eta2_old - eta_up_old, s=20, marker='o')
+# # ax.scatter(q_new, eta2_new - eta_up_new, s=20, marker='^')
+# # ax.scatter(q_new1, eta2_new1 - eta_up_new1, s=20, marker='s')
+# # ax.scatter(q_new2, eta2_new2 - eta_up_new2, s=20,  marker='D')
+
+# ax.set_xlabel('$Q$')
+# ax.set_ylabel('$(P_{c2} - P_{c1})/\\rho_{1}v_{1}^2$')
+# ax.xaxis.set_minor_locator(AutoMinorLocator())
+# ax.yaxis.set_minor_locator(AutoMinorLocator())
+
+# fig.tight_layout()
+# fig.savefig('./final.png', dpi=300)
+# plt.show()
+# plt.close('all')
+# plotdefault()
+
+
+# # Pc/P_tot against N for different M and beta
 # rho1 = 1.
 # pg1 = 1.
-# m1 = np.array([2., 5., 10., 15.])
+# m1 = np.array([8., 12., 20., 35.])
 # n1 = np.linspace(0.01, 0.99, 100)
 # beta1 = np.array([1., 5., 20., 1000.])
 # kappa = 1.
@@ -1473,8 +1645,8 @@ plt.close('all')
 #     shock = Shock(upstream['rho'], upstream['pg'], upstream['v'], upstream['pc'], upstream['B'], kappa) 
 #     downstream = shock.solution()
 #     downstream2 = shock.solution2()
-#     pc_frac = downstream['pc']/shock.M
-#     pc_frac2 = downstream2['pc']/shock.M 
+#     pc_frac = downstream['pc']/(shock.J*shock.v)
+#     pc_frac2 = downstream2['pc']/(shock.J*shock.v)
 #     for r, frac in enumerate(pc_frac):
 #       axes.scatter(n, frac, color='k')
 #     for s, frac2 in enumerate(pc_frac2): 
@@ -1483,14 +1655,28 @@ plt.close('all')
 #   axes.xaxis.set_minor_locator(AutoMinorLocator())
 #   axes.yaxis.set_minor_locator(AutoMinorLocator())
 #   if axes in [ax11, ax21, ax31]:
-#     axes.set_ylabel('$\\beta = ${:.1f}'.format(beta1[j]))
+#     axes.set_ylabel('$P_{c2}/\\rho_1 v^2_1$')
 #     axes.set_xticks([])
+#     if axes == ax11:
+#       axes.annotate('$M = ${:.1f}'.format(m1[i]), xy=(0.5, 1.05), xycoords='axes fraction')
 #   elif axes in [ax42, ax43, ax44]:
-#     axes.set_xlabel('$M = ${:.1f}'.format(m1[i]))
+#     axes.set_xlabel('$P_{c1}/P_{tot}$')
 #     axes.set_yticks([])
+#     if axes == ax44:
+#       axes.annotate('$\\beta = ${:.1f}'.format(beta1[j]), xy=(1.05, 0.5), xycoords='axes fraction', rotation=270)
 #   elif axes == ax41:
-#     axes.set_xlabel('$M = ${:.1f}'.format(m1[i]))
-#     axes.set_ylabel('$\\beta = ${:.1f}'.format(beta1[j]))
+#     axes.set_xlabel('$P_{c1}/P_{tot}$')
+#     axes.set_ylabel('$P_{c2}/\\rho_1 v^2_1$')
+#   elif axes in [ax12, ax13, ax14]:
+#     axes.set_xticks([])
+#     axes.set_yticks([])
+#     axes.annotate('$M = ${:.1f}'.format(m1[i]), xy=(0.5, 1.05), xycoords='axes fraction')
+#     if axes == ax14:
+#       axes.annotate('$\\beta = ${:.1f}'.format(beta1[j]), xy=(1.05, 0.5), xycoords='axes fraction', rotation=270)
+#   elif axes in [ax24, ax34]:
+#     axes.set_xticks([])
+#     axes.set_yticks([])
+#     axes.annotate('$\\beta = ${:.1f}'.format(beta1[j]), xy=(1.05, 0.5), xycoords='axes fraction', rotation=270)
 #   else:
 #     axes.set_xticks([])
 #     axes.set_yticks([])
@@ -1574,3 +1760,47 @@ plt.close('all')
 # fig2.savefig('/Users/tsunhinnavintsung/Box/Share/Shock2/stream_eff_new.png'.format(m1, n1), dpi=300)
 # plt.show(fig)
 # plt.close('all')
+
+
+
+# # Image parameters with multiple branches of solution
+# rho1 = 1.
+# pg1 = 1.
+# num_m = 100
+# num_n = 100
+# num_beta = 3
+# m1 = np.linspace(1.1, 30., num_m)
+# n1 = np.linspace(0.01, 0.99, num_n)
+# beta1 = np.array([1., 20., 100.])
+# kappa = 1.
+
+# sol_num = np.zeros((num_beta, num_m, num_n))
+
+# for k, beta in enumerate(beta1):
+#   for i, m in enumerate(m1):
+#     for j, n in enumerate(n1):
+#       print(k, i, j)
+#       upstream = mnbeta_to_gas(rho1, pg1, m, n, beta)
+#       shock = Shock(upstream['rho'], upstream['pg'], upstream['v'], upstream['pc'], upstream['B'], kappa) 
+#       downstream2 = shock.solution2()
+#       sol_num[k, i, j] = np.size(downstream2['rho'])
+
+# latexify(columns=2)
+# fig = plt.figure()
+# grids = gs.GridSpec(1, 3, figure=fig)
+# ax1 = fig.add_subplot(grids[0, 0])
+# ax2 = fig.add_subplot(grids[0, 1])
+# ax3 = fig.add_subplot(grids[0, 2])
+
+# for g, axes in enumerate(fig.axes):
+#   cp = axes.imshow(np.transpose(sol_num[g, :, :]), aspect='auto', origin='lower', extent=(m1[0], m1[-1], n1[0], n1[-1]))
+#   axes.set_xlabel('$M$')
+#   axes.set_ylabel('$Q$')
+#   axes.set_title('$\\beta = ${}'.format(beta1[g]))
+# # fig.colorbar(cp)
+
+# fig.tight_layout()
+# fig.savefig('/Users/tsunhinnavintsung/Box/Share/Publish/num_sol.png', dpi=300)
+# plt.show(fig)
+# plt.close('all')
+# plotdefault()
