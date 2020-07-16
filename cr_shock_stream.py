@@ -1295,21 +1295,21 @@ class Shock:
 ###########################################
 plotdefault()
 
-rho1 = 1000.
-pg1 = 1.
-m1 = 20.
-n1 = 0.2
-beta1 = 1.
-upstream = mnbeta_to_gas(rho1, pg1, m1, n1, beta1)
+# rho1 = 72.5
+# pg1 = 0.01
+# m1 = 40.
+# n1 = 0.5
+# beta1 = 2.
+# upstream = mnbeta_to_gas(rho1, pg1, m1, n1, beta1)
 
-# upstream = {}
-# upstream['rho'] = 1000.00048828125
-# upstream['v'] = 1.1771465128975358
-# upstream['pg'] = 0.9996950626373291
-# upstream['pc'] = 1.2592964172363281
-# upstream['B'] = 1.4142135381698608
+upstream = {}
+upstream['rho'] = 72.5
+upstream['v'] = 0.5699032262849384
+upstream['pg'] = 0.009999999776482582
+upstream['pc'] = 0.009999999776482582
+upstream['B'] = 0.05000000074505806
 
-kappa = 0.1
+kappa = 0.01
 
 alter = gas_to_mnbeta(upstream['rho'], upstream['pg'], upstream['v'], upstream['pc'], upstream['B'])
 
@@ -1327,8 +1327,8 @@ plt.show()
 # plotdefault()
 
 # Plot shock profile
-shkfig, convfig = shock.plotprofile(compare='./shock.hdf5', old_solution=False, mode=0)
-# shkfig, convfig = shock.plotprofile(old_solution=True, mode=0)
+shkfig, convfig = shock.plotprofile(compare='./shock.hdf5', old_solution=False, mode=2)
+# shkfig, convfig = shock.plotprofile(old_solution=False, mode=0)
 shkfig.savefig('./sh_profile_stream.png', dpi=300)
 convfig.savefig('./sh_conv_stream.png', dpi=300)
 plt.show() 
@@ -1402,47 +1402,47 @@ plt.close('all')
 # plt.show(fig)
 # plt.close('all')
 
-# # Section for Pc/Total momentum flux against N 
-# rho1 = 1.
-# pg1 = 1.
-# m1 = 50.
-# n1 = np.linspace(0.01, 0.99, 300)
-# beta1 = 2.
-# kappa = 0.1
+# Section for Pc/Total momentum flux against N 
+rho1 = 72.5
+pg1 = 0.01
+m1 = 40.
+n1 = np.linspace(0.01, 0.99, 300)
+beta1 = 15.
+kappa = 0.01
 
-# fig = plt.figure()
-# ax = fig.add_subplot(111)
-# ax.set_title('M = {0}, $\\beta$ = {1}'.format(m1, beta1))
+fig = plt.figure()
+ax = fig.add_subplot(111)
+ax.set_title('M = {0}, $\\beta$ = {1}'.format(m1, beta1))
 
-# for i, n in enumerate(n1):
-#   print(i)
-#   upstream = mnbeta_to_gas(rho1, pg1, m1, n, beta1)
-#   shock = Shock(upstream['rho'], upstream['pg'], upstream['v'], upstream['pc'], upstream['B'], kappa) 
-#   downstream = shock.solution()
-#   downstream2 = shock.solution2()
-#   pc_frac = downstream['pc']/(shock.rho*shock.v**2)
-#   pc_frac2 = downstream2['pc']/(shock.rho*shock.v**2)
-#   for j, frac in enumerate(pc_frac):
-#     if (i == 0) and (j == 0):
-#       ax.scatter(n, frac, color='k', label='Old sol.')
-#     else:
-#       ax.scatter(n, frac, color='k')
-#   for k, frac2 in enumerate(pc_frac2): 
-#     if (i == 0) and (k == 0):
-#       ax.scatter(n, frac2, marker='*', color='b', label='New sol.')
-#     else:
-#       ax.scatter(n, frac2, marker='*', color='b')
+for i, n in enumerate(n1):
+  print(i)
+  upstream = mnbeta_to_gas(rho1, pg1, m1, n, beta1)
+  shock = Shock(upstream['rho'], upstream['pg'], upstream['v'], upstream['pc'], upstream['B'], kappa) 
+  downstream = shock.solution()
+  downstream2 = shock.solution2()
+  pc_frac = downstream['pc']/(shock.rho*shock.v**2)
+  pc_frac2 = downstream2['pc']/(shock.rho*shock.v**2)
+  for j, frac in enumerate(pc_frac):
+    if (i == 0) and (j == 0):
+      ax.scatter(n, frac, color='k', label='Old sol.')
+    else:
+      ax.scatter(n, frac, color='k')
+  for k, frac2 in enumerate(pc_frac2): 
+    if (i == 0) and (k == 0):
+      ax.scatter(n, frac2, marker='*', color='b', label='New sol.')
+    else:
+      ax.scatter(n, frac2, marker='*', color='b')
 
-# ax.legend(frameon=False)
-# ax.margins(x=0)
-# ax.set_ylim(0, 1)
-# ax.set_xlabel('$N$')
-# ax.set_ylabel('$\\frac{P_{c2}}{\\rho_1 v_1^2}$')
+ax.legend(frameon=False)
+ax.margins(x=0)
+ax.set_ylim(0, 1)
+ax.set_xlabel('$N$')
+ax.set_ylabel('$\\frac{P_{c2}}{\\rho_1 v_1^2}$')
 
-# fig.tight_layout()
-# # fig.savefig('/Users/tsunhinnavintsung/Box/Share/Shock2/stream_m{:.1f}_b{:.1f}.png'.format(m1, beta1), dpi=300)
-# plt.show(fig)
-# plt.close('all')
+fig.tight_layout()
+# fig.savefig('/Users/tsunhinnavintsung/Box/Share/Shock2/stream_m{:.1f}_b{:.1f}.png'.format(m1, beta1), dpi=300)
+plt.show()
+plt.close('all')
 
 ############################################
 # Plots for publication
@@ -1514,7 +1514,7 @@ plt.close('all')
 # # Pc/P_tot against N for one set of parameter
 # rho1 = 1000. 
 # pg1 = 1. 
-# m1 = 15. 
+# m1 = 20. 
 # n1 = np.linspace(0.01, 0.99, 100)
 # beta1 = 1. 
 # kappa = 0.1 
@@ -1588,27 +1588,76 @@ plt.close('all')
 # # ax.scatter(q_new1, eta1_new1, s=20, marker='s')
 # # ax.scatter(q_new2, eta1_new2, s=20,  marker='D')
 
-# # ax.scatter(q_old, eta2_old - eta_up_old, s=20, marker='o')
-# # ax.scatter(q_new, eta2_new - eta_up_new, s=20, marker='^')
-# # ax.scatter(q_new1, eta2_new1 - eta_up_new1, s=20, marker='s')
-# # ax.scatter(q_new2, eta2_new2 - eta_up_new2, s=20,  marker='D')
+# ax.scatter(q_old, eta2_old - eta_up_old, s=20, marker='o')
+# ax.scatter(q_new, eta2_new - eta_up_new, s=20, marker='^')
+# ax.scatter(q_new1, eta2_new1 - eta_up_new1, s=20, marker='s')
+# ax.scatter(q_new2, eta2_new2 - eta_up_new2, s=20,  marker='D')
 
 # ax.set_xlabel('$Q$')
-# ax.set_ylabel('$(P_{c2} - P_{c1})/\\rho_{1}v_{1}^2$')
+# ax.set_ylabel('$\\Delta P_c/\\rho_{1}v_{1}^2$')
 # ax.xaxis.set_minor_locator(AutoMinorLocator())
 # ax.yaxis.set_minor_locator(AutoMinorLocator())
 
 # fig.tight_layout()
-# fig.savefig('./final.png', dpi=300)
+# # fig.savefig('/Users/tsunhinnavintsung/Box/Share/Publish/final.png', dpi=300)
 # plt.show()
 # plt.close('all')
 # plotdefault()
 
 
+
+# # Section for Pc/Total momentum flux against M for different N
+# rho1 = 1.
+# pg1 = 1.
+# m1 = np.logspace(0.01, 2, 1000)
+# n1 = np.array([0.1, 0.5])
+# beta1 = 1.
+# kappa = 0.1
+
+# latexify(columns=1)
+# fig1 = plt.figure()
+# fig2 = plt.figure()
+# fig = [fig1, fig2]
+# ax1 = fig1.add_subplot(111)
+# ax2 = fig2.add_subplot(111)
+# ax = [ax1, ax2]
+
+# for i, n in enumerate(n1):
+#   for j, m in enumerate(m1):
+#     print(i, j)
+#     upstream = mnbeta_to_gas(rho1, pg1, m, n, beta1)
+#     shock = Shock(upstream['rho'], upstream['pg'], upstream['v'], upstream['pc'], upstream['B'], kappa) 
+#     downstream = shock.solution()
+#     downstream2 = shock.solution2()
+#     pc_frac = (downstream['pc'] - upstream['pc'])/(shock.rho*shock.v**2)
+#     pc_frac2 = (downstream2['pc'] - upstream['pc'])/(shock.rho*shock.v**2)
+#     for l, frac in enumerate(pc_frac):
+#       ax[i].scatter(m, frac, color='k')
+#     for k, frac2 in enumerate(pc_frac2): 
+#       ax[i].scatter(m, frac2, marker='*', color='b')
+
+# for i, axes in enumerate(ax):
+#   axes.margins(x=0)
+#   axes.set_ylim(0, 1)
+#   axes.set_xlabel('$M$')
+#   axes.set_ylabel('$\\Delta P_c/\\rho_1 v_1^2}$')
+#   axes.yaxis.set_minor_locator(AutoMinorLocator())
+#   axes.set_title('$Q = ${:.1f}, $\\beta = ${:.1f}'.format(n1[i], beta1))
+#   axes.set_xscale('log')
+
+# for i, figu in enumerate(fig):
+#   figu.tight_layout()
+#   # figu.savefig('/Users/tsunhinnavintsung/Box/Share/Publish/Q{:.1f}.png'.format(n1[i]), dpi=300)
+# plt.show()
+# plt.close('all')
+# plotdefault()
+
+
+
 # # Pc/P_tot against N for different M and beta
 # rho1 = 1.
 # pg1 = 1.
-# m1 = np.array([8., 12., 20., 35.])
+# m1 = np.array([2., 5., 10., 20.])
 # n1 = np.linspace(0.01, 0.99, 100)
 # beta1 = np.array([1., 5., 20., 1000.])
 # kappa = 1.
@@ -1645,8 +1694,8 @@ plt.close('all')
 #     shock = Shock(upstream['rho'], upstream['pg'], upstream['v'], upstream['pc'], upstream['B'], kappa) 
 #     downstream = shock.solution()
 #     downstream2 = shock.solution2()
-#     pc_frac = downstream['pc']/(shock.J*shock.v)
-#     pc_frac2 = downstream2['pc']/(shock.J*shock.v)
+#     pc_frac = (downstream['pc'] - upstream['pc'])/(shock.J*shock.v)
+#     pc_frac2 = (downstream2['pc'] - upstream['pc'])/(shock.J*shock.v)
 #     for r, frac in enumerate(pc_frac):
 #       axes.scatter(n, frac, color='k')
 #     for s, frac2 in enumerate(pc_frac2): 
@@ -1655,18 +1704,18 @@ plt.close('all')
 #   axes.xaxis.set_minor_locator(AutoMinorLocator())
 #   axes.yaxis.set_minor_locator(AutoMinorLocator())
 #   if axes in [ax11, ax21, ax31]:
-#     axes.set_ylabel('$P_{c2}/\\rho_1 v^2_1$')
+#     axes.set_ylabel('$\\Delta P_c/\\rho_1 v^2_1$')
 #     axes.set_xticks([])
 #     if axes == ax11:
 #       axes.annotate('$M = ${:.1f}'.format(m1[i]), xy=(0.5, 1.05), xycoords='axes fraction')
 #   elif axes in [ax42, ax43, ax44]:
-#     axes.set_xlabel('$P_{c1}/P_{tot}$')
+#     axes.set_xlabel('$Q$')
 #     axes.set_yticks([])
 #     if axes == ax44:
 #       axes.annotate('$\\beta = ${:.1f}'.format(beta1[j]), xy=(1.05, 0.5), xycoords='axes fraction', rotation=270)
 #   elif axes == ax41:
-#     axes.set_xlabel('$P_{c1}/P_{tot}$')
-#     axes.set_ylabel('$P_{c2}/\\rho_1 v^2_1$')
+#     axes.set_xlabel('$Q$')
+#     axes.set_ylabel('$\\Delta P_c/\\rho_1 v^2_1$')
 #   elif axes in [ax12, ax13, ax14]:
 #     axes.set_xticks([])
 #     axes.set_yticks([])
@@ -1682,8 +1731,8 @@ plt.close('all')
 #     axes.set_yticks([])
 
 # fig.tight_layout()
-# fig.savefig('/Users/tsunhinnavintsung/Box/Share/Shock2/stream_pc.png', dpi=300)
-# plt.show(fig)
+# # fig.savefig('/Users/tsunhinnavintsung/Box/Share/Publish/Sol_structure.png', dpi=300)
+# plt.show()
 # plt.close('all')
 # plotdefault()
 
@@ -1802,5 +1851,111 @@ plt.close('all')
 # fig.tight_layout()
 # fig.savefig('/Users/tsunhinnavintsung/Box/Share/Publish/num_sol.png', dpi=300)
 # plt.show(fig)
+# plt.close('all')
+# plotdefault()
+
+
+
+# # Section for Pc/Total momentum flux against N down lower N
+# rho1 = 1.
+# pg1 = 1.
+# m1 = 30.
+# n1 = np.linspace(0.01, 0.99, 300)
+# beta1 = 0.5
+# kappa = 0.1
+
+# latexify(columns=1)
+# fig = plt.figure()
+# ax = fig.add_subplot(111)
+# # ax.set_title('M = {0}, $\\beta$ = {1}'.format(m1, beta1))
+
+# for i, n in enumerate(n1):
+#   print(i)
+#   upstream = mnbeta_to_gas(rho1, pg1, m1, n, beta1)
+#   shock = Shock(upstream['rho'], upstream['pg'], upstream['v'], upstream['pc'], upstream['B'], kappa) 
+#   downstream = shock.solution()
+#   downstream2 = shock.solution2()
+#   pc_frac = (downstream['pc'] - upstream['pc'])/(shock.rho*shock.v**2)
+#   pc_frac2 = (downstream2['pc'] - upstream['pc'])/(shock.rho*shock.v**2)
+#   for j, frac in enumerate(pc_frac):
+#     if (i == 0) and (j == 0):
+#       ax.scatter(n, frac, color='k')
+#     else:
+#       ax.scatter(n, frac, color='k')
+#   for k, frac2 in enumerate(pc_frac2): 
+#     if (i == 0) and (k == 0):
+#       ax.scatter(n, frac2, marker='*', color='b')
+#     else:
+#       ax.scatter(n, frac2, marker='*', color='b')
+
+# ax.scatter(0.95, 0.76, s=80, c='tab:brown', linewidths=1., edgecolors='k')
+# ax.scatter(0.8, 0.030, s=80, c='tab:green', linewidths=1., edgecolors='k')
+
+# # ax.legend(frameon=False)
+# ax.margins(x=0)
+# ax.set_ylim(0, 1)
+# ax.set_xlabel('$Q$')
+# ax.set_ylabel('$\\Delta P_c/\\rho_1 v_1^2$')
+# ax.annotate('', xy=(0.2, 0.65), xycoords='data', xytext=(0.95, 0.83), textcoords='data', \
+#   size=10, va="center", ha="center",  arrowprops=dict(arrowstyle="simple", connectionstyle="arc3,rad=-0.05"))
+# ax.annotate('', xy=(0.2, 0.05), xycoords='data', xytext=(0.8, 0.1), textcoords='data', \
+#   size=10, va="center", ha="center", arrowprops=dict(arrowstyle="simple", connectionstyle="arc3,rad=-0.05"))
+# ax.text(0.95, 1.0, 'Start', bbox=dict(boxstyle='round', fc='w'))
+# ax.text(0.8, 0.25, 'Start', bbox=dict(boxstyle='round', fc='w'))
+
+# fig.tight_layout()
+# # fig.savefig('/Users/tsunhinnavintsung/Box/Share/Publish/explain.png', dpi=300)
+# plt.show()
+# plt.close('all')
+# plotdefault()
+
+
+
+# # Section for Pc/Total momentum flux against N up N
+# rho1 = 1.
+# pg1 = 1.
+# m1 = 30.
+# n1 = np.linspace(0.01, 0.99, 300)
+# beta1 = 0.5
+# kappa = 0.1
+
+# latexify(columns=1)
+# fig = plt.figure()
+# ax = fig.add_subplot(111)
+# # ax.set_title('M = {0}, $\\beta$ = {1}'.format(m1, beta1))
+
+# for i, n in enumerate(n1):
+#   print(i)
+#   upstream = mnbeta_to_gas(rho1, pg1, m1, n, beta1)
+#   shock = Shock(upstream['rho'], upstream['pg'], upstream['v'], upstream['pc'], upstream['B'], kappa) 
+#   downstream = shock.solution()
+#   downstream2 = shock.solution2()
+#   pc_frac = (downstream['pc'] - upstream['pc'])/(shock.rho*shock.v**2)
+#   pc_frac2 = (downstream2['pc'] - upstream['pc'])/(shock.rho*shock.v**2)
+#   for j, frac in enumerate(pc_frac):
+#     if (i == 0) and (j == 0):
+#       ax.scatter(n, frac, color='k')
+#     else:
+#       ax.scatter(n, frac, color='k')
+#   for k, frac2 in enumerate(pc_frac2): 
+#     if (i == 0) and (k == 0):
+#       ax.scatter(n, frac2, marker='*', color='b')
+#     else:
+#       ax.scatter(n, frac2, marker='*', color='b')
+
+# ax.scatter(0.2, 0.003, s=80, c='tab:green', linewidths=1., edgecolors='k')
+
+# # ax.legend(frameon=False)
+# ax.margins(x=0)
+# ax.set_ylim(0, 1)
+# ax.set_xlabel('$Q$')
+# ax.set_ylabel('$\\Delta P_c/\\rho_1 v_1^2$')
+# ax.annotate('', xy=(0.95, 0.70), xycoords='data', xytext=(0.2, 0.05), textcoords='data', \
+#   size=10, va="center", ha="center",  arrowprops=dict(arrowstyle='simple', connectionstyle='angle3, angleA=5, angleB=90'))
+# ax.text(0.2, 0.15, 'Start', bbox=dict(boxstyle='round', fc='w'))
+
+# fig.tight_layout()
+# # fig.savefig('/Users/tsunhinnavintsung/Box/Share/Publish/explain_rev.png', dpi=300)
+# plt.show()
 # plt.close('all')
 # plotdefault()
