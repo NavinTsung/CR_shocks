@@ -448,12 +448,13 @@ class Shock:
 
     int_bin = 5000
     yf = vf/self.v
-    y_int = np.linspace(0.9999, yf, int_bin)
+    y_int = np.linspace(0.9999, 1.0001*yf, int_bin)
     dxdy = lambda y, x: ldiff*self.D(y)/((1. - y)*self.N(y))
-    sol = integrate.solve_ivp(dxdy, [y_int[0], y_int[-1]], [0.], t_eval=y_int)
+    sol = integrate.solve_ivp(dxdy, [y_int[0], yf], [0.], t_eval=y_int)
     x_int = sol.y[0]
 
     rho_int = self.J/(self.v*y_int) 
+    v_int = self.v*y_int
     pg_int = self.pg*np.array([self.adiabat(y) for i, y in enumerate(y_int)])
     pc_int = self.M - self.J*self.v*y_int - pg_int 
     fc_int = self.E - 0.5*self.J*(self.v*y_int)**2 - (gamma_g/(gamma_g - 1.))*pg_int*self.v*y_int
@@ -506,6 +507,14 @@ class Shock:
         mom = rho*v**2 + pg + pc
         eng = (0.5*rho*v**2 + (gamma_g/(gamma_g - 1.))*pg)*v + fc 
         wave = pg/rho**(gamma_g) 
+
+      # Save to memory
+      self.x_sim = x 
+      self.rho_sim = rho 
+      self.v_sim = v 
+      self.pg_sim = pg 
+      self.pc_sim = pc 
+      self.fc_sim = fc
 
       # Shift position of curves by finding the location of max grad pc
       drhodx = np.gradient(rho,x)
@@ -594,18 +603,17 @@ class Shock:
 # End of class
 
 ###########################################
-rho1 = 100.
+rho1 = 1.
 pg1 = 1.
-m1 = 6.
-n1 = 0.05
+m1 = 30.
+n1 = 0.5
 upstream = mn_to_gas(rho1, pg1, m1, n1)
 
 # upstream = {}
-# upstream['rho'] = 1.0000
-# upstream['v'] = 11.902177
-# upstream['pg'] = 1.
-# upstream['pc'] = 0.33512
-# upstream['B'] = 1.
+# upstream['rho'] = 100.
+# upstream['v'] = 2.0
+# upstream['pg'] = 1.0
+# upstream['pc'] = 0.01
 
 kappa = 0.1
 
@@ -623,7 +631,7 @@ plt.show(fig)
 
 # Plot shock profile
 # shkfig, convfig = shock.plotprofile(compare='./shock.hdf5', mode=0)
-shkfig, convfig = shock.plotprofile(mode=2)
+shkfig, convfig = shock.plotprofile(mode=0)
 shkfig.savefig('./sh_profile_diff.png', dpi=300)
 convfig.savefig('./sh_conv_diff.png', dpi=300)
 plt.show()

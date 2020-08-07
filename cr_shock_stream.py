@@ -104,13 +104,14 @@ def gas_to_mnbeta(rho, pg, v, pc, B):
   return convert
 
 class Shock:
-  def __init__(self, rho, pg, v, pc, B, kappa):
+  def __init__(self, rho, pg, v, pc, B, kappa, no_touch=False):
     self.rho = rho 
     self.v = v
     self.pg = pg 
     self.pc = pc 
     self.B = B
     self.kappa = kappa
+    self.no_touch = no_touch # Consider solution even if the adiabat doesn't cross the new reflected Hugoniot
 
     # Secondary variables
     self.cs = np.sqrt(gamma_g*pg/rho)
@@ -219,6 +220,16 @@ class Shock:
             x_solute[j] = opt.brentq(func, x[sol_loc[j]], x[sol_loc[j]+1])
           x_sol = np.append(x_sol, x_solute)
       return x_sol
+
+  def find_min(self, lower, upper, func):
+    bin_number = 10
+    x = np.linspace(lower, upper, bin_number)
+    y = np.zeros(bin_number)
+    for i, x1 in enumerate(x):
+      y[i] = func(x1)
+    index = np.argmin(y)
+    x_sol = opt.fmin(func, x[index], disp=False)[0]
+    return x_sol
 
   def hugzeros(self):
     asymp = self.asymp
@@ -404,9 +415,33 @@ class Shock:
         upper = self.v_ver2[0]/self.v 
       if self.use_ref2hug:
         adrefhug = lambda y: self.adiabat(y) - self.ref2hug(y)
+        if self.no_touch: # Find the closest point between the adiabat and the reflected hugoniot
+          pc_lower = self.M - self.J*self.v*upper - self.pg*self.ref2hug(upper)
+          pc_upper = self.M - self.J*self.v*lower - self.pg*self.ref2hug(lower)
+          pc_lower = 0. if pc_lower < 0. else pc_lower
+          pc_upper = 0.5*pc_upper
+          ady_touch = lambda pc: self.reversead(pc)['y_adiabat']
+          ref2y_touch = lambda pc: self.reversead(pc)['y_ref2hug']
+          adp_touch = lambda pc: self.reversead(pc)['p_adiabat']
+          ref2p_touch = lambda pc: self.reversead(pc)['p_ref2hug']
+          dis_sq = lambda pc: self.pg**2*(ref2p_touch(pc) - adp_touch(pc))**2 + self.v**2*(ref2y_touch(pc) - ady_touch(pc))**2
       else:
         adrefhug = lambda y: self.adiabat(y) - self.ref2hug2(y)
+        if self.no_touch:
+          pc_lower = self.M - self.J*self.v*upper - self.pg*self.ref2hug2(upper)
+          pc_upper = self.M - self.J*self.v*lower - self.pg*self.ref2hug2(lower)
+          pc_lower = 0. if pc_lower < 0. else pc_lower
+          pc_upper = 0.5*pc_upper
+          ady_touch = lambda pc: self.reversead(pc)['y_adiabat']
+          ref2y_touch = lambda pc: self.reversead(pc)['y_ref2hug']
+          adp_touch = lambda pc: self.reversead(pc)['p_adiabat']
+          ref2p_touch = lambda pc: self.reversead(pc)['p_ref2hug']
+          dis_sq = lambda pc: self.pg**2*(ref2p_touch(pc) - adp_touch(pc))**2 + self.v**2*(ref2y_touch(pc) - ady_touch(pc))**2
       y_sol = self.find_root(lower, upper, adrefhug)
+      if self.no_touch:
+        pc_sol_touch = self.find_min(pc_lower, pc_upper, dis_sq)
+        y_sol_touch = (self.M - pc_sol_touch - self.pg*ady_touch(pc_sol_touch))/(self.J*self.v)
+        y_sol = np.append(y_sol, y_sol_touch)
       if np.size(self.v_ver2) != 0:
         if self.use_ref2hug:
           adrefhug2 = lambda y: self.adiabat(y) - self.ref2hug2(y)
@@ -732,6 +767,31 @@ class Shock:
     part2 = (gamma_g - 1.)*B**2*(2.*gamma_g*ma*np.sqrt(y) + 1. - gamma_g)/(gamma_g*(2.*gamma_g + 1.))
     return (part1 - part2)/pg # Returns p-bar for the adiabat
 
+  def reversead(self, pc):
+    J = self.J
+    M = self.M 
+    v = self.v 
+    pg = self.pg 
+    asymp = self.asymp
+    lower = self.v_adhug2zeros[0]/self.v 
+    upper = 1.1
+    output = {}
+    pc_curve = lambda y: (-J*v*y + M - pc)/pg 
+    adpc = lambda y: self.adiabat(y) - pc_curve(y)
+    if self.use_ref2hug:
+      ref2hugpc = lambda y: self.ref2hug(y) - pc_curve(y)
+    else:
+      ref2hugpc = lambda y: self.ref2hug2(y) - pc_curve(y)
+    y_sol_ad = self.find_root(lower, upper, adpc, asymptote=asymp)[0]
+    y_sol_ref2 = self.find_root(lower, upper, ref2hugpc, asymptote=asymp)[0]
+    p_sol_ad = self.adiabat(y_sol_ad)
+    p_sol_ref2 = self.ref2hug(y_sol_ref2) if self.use_ref2hug else self.ref2hug2(y_sol_ref2)
+    output['y_adiabat'] = y_sol_ad 
+    output['y_ref2hug'] = y_sol_ref2 
+    output['p_adiabat'] = p_sol_ad 
+    output['p_ref2hug'] = p_sol_ref2 
+    return output # Find point on the adiabat for a given pc pc
+
   # D function in Volk et al. 1984
   def D(self, y): 
     ms = self.ms
@@ -936,7 +996,7 @@ class Shock:
 
     int_bin = 5000
     yf = vf/self.v
-    y_int = np.linspace(0.9999999999, 1.000000000000001*yf, int_bin)
+    y_int = np.linspace(0.9999999999, 1.0000000000001*yf, int_bin)
     dxdy = lambda y, x: ldiff*self.D(y)/((1. - y)*self.N(y))
     sol = integrate.solve_ivp(dxdy, [y_int[0], yf], [0.], t_eval=y_int) # 0.9999 to ensure t_span encompasses y_int
     x_int = sol.y[0]
@@ -1295,25 +1355,25 @@ class Shock:
 ###########################################
 plotdefault()
 
-# rho1 = 72.5
-# pg1 = 0.01
-# m1 = 40.
-# n1 = 0.5
-# beta1 = 2.
-# upstream = mnbeta_to_gas(rho1, pg1, m1, n1, beta1)
+rho1 = 100.
+pg1 = 1.
+m1 = 20
+n1 = 0.6
+beta1 = 1.
+upstream = mnbeta_to_gas(rho1, pg1, m1, n1, beta1)
 
-upstream = {}
-upstream['rho'] = 72.5
-upstream['v'] = 0.5699032262849384
-upstream['pg'] = 0.009999999776482582
-upstream['pc'] = 0.009999999776482582
-upstream['B'] = 0.05000000074505806
+# upstream = {}
+# upstream['rho'] = 1000.1323852539062
+# upstream['v'] = 3.884837864758096
+# upstream['pg'] = 1.015296220779419
+# upstream['pc'] = 20.982611338297527
+# upstream['B'] = 1.4142135381698608
 
-kappa = 0.01
+kappa = 0.1
 
 alter = gas_to_mnbeta(upstream['rho'], upstream['pg'], upstream['v'], upstream['pc'], upstream['B'])
 
-shock = Shock(upstream['rho'], upstream['pg'], upstream['v'], upstream['pc'], upstream['B'], kappa)
+shock = Shock(upstream['rho'], upstream['pg'], upstream['v'], upstream['pc'], upstream['B'], kappa, no_touch=False)
 downstream = shock.solution()
 downstream2 = shock.solution2()
 down_mnbeta = gas_to_mnbeta(downstream['rho'], downstream['pg'], downstream['v'], downstream['pc'], upstream['B'])
@@ -1327,8 +1387,8 @@ plt.show()
 # plotdefault()
 
 # Plot shock profile
-shkfig, convfig = shock.plotprofile(compare='./shock.hdf5', old_solution=False, mode=2)
-# shkfig, convfig = shock.plotprofile(old_solution=False, mode=0)
+# shkfig, convfig = shock.plotprofile(compare='./shock.hdf5', old_solution=True, mode=0)
+shkfig, convfig = shock.plotprofile(old_solution=True, mode=0)
 shkfig.savefig('./sh_profile_stream.png', dpi=300)
 convfig.savefig('./sh_conv_stream.png', dpi=300)
 plt.show() 
@@ -1402,47 +1462,47 @@ plt.close('all')
 # plt.show(fig)
 # plt.close('all')
 
-# Section for Pc/Total momentum flux against N 
-rho1 = 72.5
-pg1 = 0.01
-m1 = 40.
-n1 = np.linspace(0.01, 0.99, 300)
-beta1 = 15.
-kappa = 0.01
+# # Section for Pc/Total momentum flux against N 
+# rho1 = 72.5
+# pg1 = 0.01
+# m1 = 40.
+# n1 = np.linspace(0.01, 0.99, 300)
+# beta1 = 15.
+# kappa = 0.01
 
-fig = plt.figure()
-ax = fig.add_subplot(111)
-ax.set_title('M = {0}, $\\beta$ = {1}'.format(m1, beta1))
+# fig = plt.figure()
+# ax = fig.add_subplot(111)
+# ax.set_title('M = {0}, $\\beta$ = {1}'.format(m1, beta1))
 
-for i, n in enumerate(n1):
-  print(i)
-  upstream = mnbeta_to_gas(rho1, pg1, m1, n, beta1)
-  shock = Shock(upstream['rho'], upstream['pg'], upstream['v'], upstream['pc'], upstream['B'], kappa) 
-  downstream = shock.solution()
-  downstream2 = shock.solution2()
-  pc_frac = downstream['pc']/(shock.rho*shock.v**2)
-  pc_frac2 = downstream2['pc']/(shock.rho*shock.v**2)
-  for j, frac in enumerate(pc_frac):
-    if (i == 0) and (j == 0):
-      ax.scatter(n, frac, color='k', label='Old sol.')
-    else:
-      ax.scatter(n, frac, color='k')
-  for k, frac2 in enumerate(pc_frac2): 
-    if (i == 0) and (k == 0):
-      ax.scatter(n, frac2, marker='*', color='b', label='New sol.')
-    else:
-      ax.scatter(n, frac2, marker='*', color='b')
+# for i, n in enumerate(n1):
+#   print(i)
+#   upstream = mnbeta_to_gas(rho1, pg1, m1, n, beta1)
+#   shock = Shock(upstream['rho'], upstream['pg'], upstream['v'], upstream['pc'], upstream['B'], kappa) 
+#   downstream = shock.solution()
+#   downstream2 = shock.solution2()
+#   pc_frac = downstream['pc']/(shock.rho*shock.v**2)
+#   pc_frac2 = downstream2['pc']/(shock.rho*shock.v**2)
+#   for j, frac in enumerate(pc_frac):
+#     if (i == 0) and (j == 0):
+#       ax.scatter(n, frac, color='k', label='Old sol.')
+#     else:
+#       ax.scatter(n, frac, color='k')
+#   for k, frac2 in enumerate(pc_frac2): 
+#     if (i == 0) and (k == 0):
+#       ax.scatter(n, frac2, marker='*', color='b', label='New sol.')
+#     else:
+#       ax.scatter(n, frac2, marker='*', color='b')
 
-ax.legend(frameon=False)
-ax.margins(x=0)
-ax.set_ylim(0, 1)
-ax.set_xlabel('$N$')
-ax.set_ylabel('$\\frac{P_{c2}}{\\rho_1 v_1^2}$')
+# ax.legend(frameon=False)
+# ax.margins(x=0)
+# ax.set_ylim(0, 1)
+# ax.set_xlabel('$N$')
+# ax.set_ylabel('$\\frac{P_{c2}}{\\rho_1 v_1^2}$')
 
-fig.tight_layout()
-# fig.savefig('/Users/tsunhinnavintsung/Box/Share/Shock2/stream_m{:.1f}_b{:.1f}.png'.format(m1, beta1), dpi=300)
-plt.show()
-plt.close('all')
+# fig.tight_layout()
+# # fig.savefig('/Users/tsunhinnavintsung/Box/Share/Shock2/stream_m{:.1f}_b{:.1f}.png'.format(m1, beta1), dpi=300)
+# plt.show()
+# plt.close('all')
 
 ############################################
 # Plots for publication
@@ -1483,21 +1543,91 @@ plt.close('all')
 # latexify(columns=1)
 # fig1 = plt.figure()
 # fig2 = plt.figure()
-# fig = [fig1, fig2]
+# fig3 = plt.figure()
+# fig4 = plt.figure()
+# fig = [fig1, fig2, fig3, fig4]
 # ax1 = fig1.add_subplot(111)
 # ax2 = fig2.add_subplot(111)
-# ax = [ax1, ax2]
+# ax3 = fig3.add_subplot(111)
+# ax4 = fig4.add_subplot(111)
+# ax = [ax1, ax2, ax3, ax4]
 
 # ax1.plot(x_int, shock.rho_int, '-o', label='$\\rho$')
-# ax2.plot(x_int, shock.pc_int, '-o', label='$P_c$')
+# ax2.plot(x_int, shock.v_int, '-o', label='$v$')
+# ax3.plot(x_int, shock.pg_int, '-o', label='$P_g$')
+# ax4.plot(x_int, shock.pc_int, '-o', label='$P_c$')
 # ax1.plot(shock.x_sim, shock.rho_sim, '--', label='Sim')
-# ax2.plot(shock.x_sim, shock.pc_sim, '--', label='Sim')
+# ax2.plot(shock.x_sim, shock.v_sim, '--', label='Sim')
+# ax3.plot(shock.x_sim, shock.pg_sim, '--', label='Sim')
+# ax4.plot(shock.x_sim, shock.pc_sim, '--', label='Sim')
 
 # ax1.set_ylabel('$\\rho$')
-# ax2.set_ylabel('$P_c$')
+# ax2.set_ylabel('$v$') 
+# ax3.set_ylabel('$P_g$')
+# ax4.set_ylabel('$P_c$')
 
 # for axes in ax:
 #   axes.set_xlabel('$x$')
+#   axes.xaxis.set_minor_locator(AutoMinorLocator())
+#   axes.yaxis.set_minor_locator(AutoMinorLocator())
+#   axes.legend(frameon=False)
+
+# for i, figu in enumerate(fig):
+#   figu.tight_layout()
+#   figu.savefig('/Users/tsunhinnavintsung/Box/Share/Publish/free_{}.png'.format(i), dpi=300)
+# plt.show()
+# plt.close('all')
+# plotdefault()
+
+
+
+# # Compare shock analytics and simulation with real units
+# rho_ism = 72.5
+# pg_ism = 0.01
+# pc_ism = 0.01
+# kappa_ism = 0.01
+# vel_unit = 1.e8 # 1000 km/s
+# pc = 3.086e18 # parsec in cm
+# length_unit = 3.086e19 # 10 pc
+# kyear = 1000*86400*365 # in sec
+# time_unit = (length_unit/vel_unit)/kyear
+# kappa_unit = vel_unit*length_unit
+
+# # Shift position of curves by finding the location of max grad pc
+# drhodx = np.gradient(shock.rho_sim, shock.x_sim)
+# dpcdx = np.gradient(shock.pc_sim, shock.x_sim)
+# x0 = shock.x_sim[np.argmax(np.abs(dpcdx))]
+# x0_int = shock.x_int[np.argmax(np.abs(np.gradient(shock.pc_int[:-1], shock.x_int[:-1])))]
+# if dpcdx[np.argmax(np.abs(dpcdx))] > 0:
+#   x_int = shock.x_int - x0_int + x0 
+#   signature = 1
+# else:
+#   x_int = -(shock.x_int - x0_int) + x0
+#   signature = -1
+
+# latexify(columns=1)
+# fig1 = plt.figure()
+# fig2 = plt.figure()
+# fig3 = plt.figure()
+# fig = [fig1, fig2, fig3]
+# ax1 = fig1.add_subplot(111)
+# ax2 = fig2.add_subplot(111)
+# ax3 = fig3.add_subplot(111)
+# ax = [ax1, ax2, ax3]
+
+# ax1.plot(x_int*length_unit/pc, shock.rho_int/rho_ism, '-o', label='$\\rho$')
+# ax2.plot(x_int*length_unit/pc, shock.pc_int/pc_ism, '-o', label='$P_c$')
+# ax3.plot(x_int*length_unit/pc, shock.pg_int/pg_ism, '-o', label='$P_g$')
+# ax1.plot(shock.x_sim*length_unit/pc, shock.rho_sim/rho_ism, '--', label='Sim')
+# ax2.plot(shock.x_sim*length_unit/pc, shock.pc_sim/pc_ism, '--', label='Sim')
+# ax3.plot(shock.x_sim*length_unit/pc, shock.pg_sim/pg_ism, '--', label='Sim')
+
+# ax1.set_ylabel('$\\rho/\\rho_\\mathrm{ISM}$')
+# ax2.set_ylabel('$P_c/P_{c,\\mathrm{ISM}}$') 
+# ax3.set_ylabel('$P_gP_{g,\\mathrm{ISM}}$')
+
+# for axes in ax:
+#   axes.set_xlabel('$x$ pc')
 #   axes.xaxis.set_minor_locator(AutoMinorLocator())
 #   axes.yaxis.set_minor_locator(AutoMinorLocator())
 #   axes.legend(frameon=False)
@@ -1638,12 +1768,12 @@ plt.close('all')
 
 # for i, axes in enumerate(ax):
 #   axes.margins(x=0)
-#   axes.set_ylim(0, 1)
 #   axes.set_xlabel('$M$')
 #   axes.set_ylabel('$\\Delta P_c/\\rho_1 v_1^2}$')
 #   axes.yaxis.set_minor_locator(AutoMinorLocator())
 #   axes.set_title('$Q = ${:.1f}, $\\beta = ${:.1f}'.format(n1[i], beta1))
 #   axes.set_xscale('log')
+#   axes.set_yscale('log')
 
 # for i, figu in enumerate(fig):
 #   figu.tight_layout()
@@ -1651,6 +1781,53 @@ plt.close('all')
 # plt.show()
 # plt.close('all')
 # plotdefault()
+
+
+
+# Section for Pc/Total momentum flux against M for one N
+rho1 = 1.
+pg1 = 1.
+m1 = np.logspace(0.01, 2, 1000)
+n1 = np.array([0.5])
+beta1 = 1.
+kappa = 0.1
+
+latexify(columns=1)
+fig1 = plt.figure()
+fig = [fig1]
+ax1 = fig1.add_subplot(111)
+ax = [ax1]
+
+for i, n in enumerate(n1):
+  for j, m in enumerate(m1):
+    print(i, j)
+    upstream = mnbeta_to_gas(rho1, pg1, m, n, beta1)
+    shock = Shock(upstream['rho'], upstream['pg'], upstream['v'], upstream['pc'], upstream['B'], kappa) 
+    downstream = shock.solution()
+    downstream2 = shock.solution2()
+    pc_frac = (downstream['pc'] - upstream['pc'])/(shock.rho*shock.v**2)
+    pc_frac2 = (downstream2['pc'] - upstream['pc'])/(shock.rho*shock.v**2)
+    ax[i].scatter(m, shock.rho*shock.v**2, marker='^', color='g')
+    for l, frac in enumerate(pc_frac):
+      ax[i].scatter(m, frac*(shock.rho*shock.v**2), color='k')
+    for k, frac2 in enumerate(pc_frac2): 
+      ax[i].scatter(m, frac2*(shock.rho*shock.v**2), marker='*', color='b')
+
+for i, axes in enumerate(ax):
+  axes.margins(x=0)
+  axes.set_xlabel('$M$')
+  axes.set_ylabel('$\\Delta P_c, \\rho_1 v_1^2}$')
+  axes.set_title('$Q = ${:.1f}, $\\beta = ${:.1f}'.format(n1[i], beta1))
+  axes.set_xscale('log')
+  axes.set_yscale('log')
+  # axes.yaxis.set_minor_locator(AutoMinorLocator())
+
+for i, figu in enumerate(fig):
+  figu.tight_layout()
+  # figu.savefig('/Users/tsunhinnavintsung/Box/Share/Publish/not_norm.png'.format(n1[i]), dpi=300)
+plt.show()
+plt.close('all')
+plotdefault()
 
 
 
